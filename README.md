@@ -12,7 +12,7 @@ python: 3.8.10, scapy: 2.4.4, ouilookup: 0.2.4, pybluez: 0.40
 $ sudo apt-get install libbluetooth-dev
 $ python3 -m pip install git+https://github.com/pybluez/pybluez.git#egg=pybluez
 $ python3 -m pip install scapy==2.4.4
-$ python3 -m pip intsall ouilookup==0.2.4
+$ python3 -m pip install ouilookup==0.2.4
 ```
 
 ## Running the fuzzer
