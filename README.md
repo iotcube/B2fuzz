@@ -128,3 +128,9 @@ $ python3 -m pip install pyshark==0.6
 **Required root permission for capture bluetooth packet.**
 
 1. run monitor.py with sudo in target device.
+
+## Others
+
+- Contacts: dlehgus1023@naver.com, pingjuu@korea.ac.kr, Computer & Communication Security Lab (https://ccs.korea.ac.kr)
+- It will be uploaded on the IoTcube Platform in **November**
+- B2FUZZ's research on the L2CAP layer is scheduled to be presented as BLOOMFUZZ at ESORICS 2024.
