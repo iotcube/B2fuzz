@@ -46,6 +46,7 @@ def parse_pkt(pkt):
         'frame type': hex(_pf(pkt[1]))
     }
     payload['length'] = ((pkt[2] - 1) << 1)
+    payload['data'] = pkt[3:-1].hex()
     payload['fcs'] = hex(pkt[-1])
     return payload
 
