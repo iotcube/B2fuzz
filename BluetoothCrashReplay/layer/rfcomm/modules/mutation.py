@@ -3,9 +3,9 @@ import traceback
 import sys
 from collections import OrderedDict
 from datetime import date, datetime
-from modules.logger import *
-from modules.construct_adaptive_sm import *
-from lib import *
+from layer.rfcomm.modules.logger import *
+from layer.rfcomm.modules.construct_adaptive_sm import *
+from layer.rfcomm.lib import *
 
 now = datetime.now()
 t = str(now)[11:19].replace(':',"",2)
@@ -63,6 +63,7 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
     pkt_info = ""
     pkt_cnt += 1
     is_crashed = False
+    is_resend_required = False
     try:
         sock.send(pkt)
         pkt_info = {}
@@ -90,6 +91,8 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
             pkt_info["crash"] = "y"
             pkt_info["crash_info"] = "ConnectionResetError"
             is_crashed = True
+        else:
+            is_resend_required = True
 
     except ConnectionRefusedError:
         print("[-] Crash Found - ConnectionRefusedError detected")
@@ -109,6 +112,8 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
             pkt_info["crash"] = "y"
             pkt_info["crash_info"] = "ConnectionRefusedError"
             is_crashed = True
+        else:
+            is_resend_required = True
 
     except ConnectionAbortedError:
         print("[-] Crash Found - ConnectionAbortedError detected")
@@ -128,6 +133,8 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
             pkt_info["crash"] = "y"
             pkt_info["crash_info"] = "ConnectionAbortedError"		
             is_crashed = True
+        else:
+            is_resend_required = True
 
     except TimeoutError:
         # State Timeout
@@ -172,13 +179,32 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
             pkt_info["crash_info"] = "OSError - Host is down"
             print("[-] Crash packet causes HOST DOWN. Test finished.")
             is_crashed = True
+        else:
+            is_resend_required = True
 
+    except Exception as e:
+        print(f"Undefined Error detected : {e}")
+        print("[-] Crash Found - Undefined Error detected")
+        if(l2ping(bt_addr) == False):
+            pkt_info = {}
+            pkt_info["no"] = pkt_cnt
+            pkt_info["protocol"] = "RFCOMM"
+            pkt_info["sended_time"] = str(datetime.now())
+            pkt_info["payload"] = parse_pkt(pkt)
+            pkt_info["state"] = state2str(state)
+            pkt_info["sended?"] = "n"
+            pkt_info["crash"] = "y"
+            pkt_info["crash_info"] = "Undefined Error"
+            print("Crash Packet :", pkt_info)
+            is_crashed = True
+        else:
+            is_resend_required = True
     else: pass
 
     time.sleep(0.1)
     if(pkt_info == ""): pass
     else: logger.inputQueue(pkt_info)
-    return is_crashed
+    return is_crashed, is_resend_required
 
 def closed_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
     sock = closed(target_addr)

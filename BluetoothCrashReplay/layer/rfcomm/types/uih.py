@@ -40,6 +40,7 @@ class UIH(RFCOMM):
     @classmethod
     def gen(cls, mx_type=None):
         ret = UIH()
+        #ret.addr = 0b00000101 + (random.randint(0, 30) << 3)
         ret.addr = 0b00000001
         ret.addr |= random.randint(0,1) << 1 # C/R
         ret.addr |= random.randint(0,1) << 2 # Direction
