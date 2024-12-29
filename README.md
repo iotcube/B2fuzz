@@ -20,6 +20,7 @@ $ python3 -m pip install ouilookup==0.2.4
 1. move to B2Fuzz folder.
 2. run main.py with sudo.
 3. Choose the layer.
+If you choose the L2CAP layer, see the README file in the L2CAP directory for more details.
 
 ```
 $ sudo python3 run.py
@@ -129,8 +130,12 @@ $ python3 -m pip install pyshark==0.6
 
 1. run monitor.py with sudo in target device.
 
+# Crash Replay
+It is designed to replay Bluetooth packets from log files specifically targeting RFCOMM and L2CAP layers.
+Refer to the README file in the Bluetooth Crash Replay directory for more details.
+
 ## Others
 
 - Contacts: dlehgus1023@naver.com, pingjuu@korea.ac.kr, Computer & Communication Security Lab (https://ccs.korea.ac.kr)
-- It will be uploaded on the IoTcube Platform in **November**
+- It will be uploaded on the IoTcube Platform.
 - B2FUZZ's research on the L2CAP layer is scheduled to be presented as BLOOMFUZZ at ESORICS 2024.
