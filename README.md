@@ -20,6 +20,7 @@ $ python3 -m pip install ouilookup==0.2.4
 1. move to B2Fuzz folder.
 2. run main.py with sudo.
 3. Choose the layer.
+
 If you choose the L2CAP layer, see the README file in the L2CAP directory for more details.
 
 ```
