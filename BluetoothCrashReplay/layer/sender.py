@@ -10,5 +10,5 @@ class Sender(ABC):
     def connect(self):
         pass
 
-    def run(self, mini_range_json):
+    def run(self, packets_json):
         pass

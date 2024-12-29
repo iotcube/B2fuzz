@@ -227,6 +227,7 @@ class L2CAPParser(Parser):
         self.filepath: pathlib.Path = filepath
         self.info_end_idx: int = 0
         self.get_raw_text()
+        self.wfl = {}
 
     def get_info(self):
         self.raw_text_lines = [l for l in self.raw_text.split('\n')]
@@ -246,8 +247,10 @@ class L2CAPParser(Parser):
         ret += '}'
         self.info = json.loads(ret)
 
-        with open(self.filepath.parent / 'info.json', mode='w', encoding='utf-8') as f:
+        with open(self.filepath.parent / 'info.wfl', mode='w', encoding='utf-8') as f:
             f.write(ret)
+        self.wfl["info"] = self.info
+            
         self.info_end_idx = info_end_idx
 
     def get_pkts(self):
@@ -256,17 +259,21 @@ class L2CAPParser(Parser):
         for idx, line in enumerate(self.pkts):
             if DEBUG_STR in self.pkts[idx]:
                 self.pkts[idx] = line.replace(DEBUG_STR, '').replace('\'', '"')
-        self.mini_range_pkts = {"0": {"packets": []}}
+        self.packets_pkts = {"packets": []}
         for i, pkt in enumerate(self.pkts):
             if pkt == '**ITEREND**':
                 continue
             if pkt == '':
                 continue
-            self.mini_range_pkts["0"]["packets"].append(json.loads(pkt.replace("None", "null")))  
-        with open(self.filepath.parent / 'mini_range.json', mode='w', encoding='utf-8') as f:
-            #json_str = pprint.pformat(self.mini_range_pkts, compact=True).replace('\'', '"').replace("None", "null"
-            f.write(json.dumps(self.mini_range_pkts))
+            self.packets_pkts["packets"].append(json.loads(pkt.replace("None", "null"))) 
 
+        with open(self.filepath.parent / 'packets.wfl', mode='w', encoding='utf-8') as f:
+            json_str = pprint.pformat(self.packets_pkts, compact=True).replace('\'', '"').replace("None", "null")
+            f.write(json_str)
+        file_name = str(self.filepath.parent).split('/')[-1]+'.wfl'
+        self.wfl["pkt"] = self.packets_pkts["packets"]
+        with open(self.filepath.parent / file_name, mode='w', encoding='utf-8') as f:
+            json.dump(self.wfl, f)
 
 class L2CAPSender(Sender):
     def __init__(self, bt_addr):
@@ -277,31 +284,27 @@ class L2CAPSender(Sender):
     def connect(self):
         self.sock = BluetoothL2CAPSocket(self.bt_addr)
         
-    def run(self, mini_range_json):
+    def run(self, packets_json):
         self.connect()
-        with open(mini_range_json, mode='r', encoding='utf-8') as f:
+        with open(packets_json, mode='r', encoding='utf-8') as f:
             iterlist = json.load(f)
         
-        keys = list(iterlist.keys())
-        print(f"[Total iteration] : {keys[0]}-{keys[-1]}") 
 
-        for k in keys:
-            pkts = iterlist[k]["packets"]
-            print("{} target iteration ".format(k))
-            for pkt in pkts:
-                p, sock = replay_make_btpkt(self.sock, pkt)
-                pkt_send_cnt = 0
-                is_resend_required = False
-                
-                while True:
-                    # send
-                    sock, crashcnt, is_resend_required = bin_send_pkt(self.bt_addr, sock, p, pkt["payload"]["code"], pkt["l2cap_state"])
-                    self.total_crashcnt += crashcnt
-                    self.total_sended_pktcnt += 1
-                    pkt_send_cnt += 1
-                    if pkt_send_cnt >= 3 or not is_resend_required:
-                        break
-                    print(f"Try {pkt_send_cnt} send, "+ f"fail? : {is_resend_required}")
-                    exit(1)
+        pkts = iterlist["packets"]
+        for pkt in pkts:
+            p, sock = replay_make_btpkt(self.sock, pkt)
+            pkt_send_cnt = 0
+            is_resend_required = False
+            
+            while True:
+                # send
+                sock, crashcnt, is_resend_required = bin_send_pkt(self.bt_addr, sock, p, pkt["payload"]["code"], pkt["l2cap_state"])
+                self.total_crashcnt += crashcnt
+                self.total_sended_pktcnt += 1
+                pkt_send_cnt += 1
+                if pkt_send_cnt >= 3 or not is_resend_required:
+                    break
+                print(f"Try {pkt_send_cnt} send, "+ f"fail? : {is_resend_required}")
+                exit(1)
             print("***Total Crash Count : ", self.total_crashcnt)
             print("***Total Sended Packet Count : ", self.total_sended_pktcnt)

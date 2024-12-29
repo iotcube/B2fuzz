@@ -10,6 +10,7 @@ from layer.rfcomm.types.uih import DATA
 
 STATE_LIST = [RFCOMM_CLOSED_STATE, RFCOMM_TERM_WAIT_SEC_CHECK_STATE, RFCOMM_OPENED_STATE, RFCOMM_DISC_WAIT_UA_STATE]
 
+# event 발생 frame은 총 6개, BluDroid의 유효 frame의 여집합
 bluedroid_hidden_state = {
     RFCOMM_CLOSED_STATE: [ DM, UA ],
     RFCOMM_TERM_WAIT_SEC_CHECK_STATE: [ DM, DISC, UA ],
@@ -17,6 +18,7 @@ bluedroid_hidden_state = {
     RFCOMM_DISC_WAIT_UA_STATE: [ DM, DISC, SABM, UIH ],
 }
 
+# BlueDroid 정적분석을 통해 발견된 frame
 NORMAL_STATE_FRAME = {
     RFCOMM_CLOSED_STATE: [ SABM, DATA, UIH, DISC ],
     RFCOMM_TERM_WAIT_SEC_CHECK_STATE: [ UIH, SABM, DATA ],

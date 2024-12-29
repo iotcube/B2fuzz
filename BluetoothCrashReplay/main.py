@@ -40,7 +40,7 @@ class PKTSender:
 
     def get_bd_addr(self):
         try:
-            with open(self.filepath.parent / 'info.json', mode='r', encoding='utf-8') as f:
+            with open(self.filepath.parent / 'info.wfl', mode='r', encoding='utf-8') as f:
                 data = json.load(f)
                 bd_addr = str(data['bdaddr'])
                 return bd_addr
@@ -55,7 +55,6 @@ class PKTSender:
             logger.info('RFCOMM Send')
         if isinstance(self.parser,L2CAPParser):
             self.sender = L2CAPSender(self.get_bd_addr())
-            #self.sender = L2CAPSender('3C:28:6D:E6:E7:17')
             logger.info('L2CAP Send')
 
     def run(self):
@@ -68,7 +67,7 @@ class PKTSender:
             self.parser.get_info()
             self.parser.get_pkts()
         self.set_sender()
-        self.sender.run(self.filepath.parent / 'mini_range.json')
+        self.sender.run(self.filepath.parent / 'packets.wfl')
 
 if __name__ == '__main__':
     sender = PKTSender()
