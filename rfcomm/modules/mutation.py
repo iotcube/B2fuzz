@@ -29,15 +29,15 @@ def _pf(const):
 
 def state2str(state):
     if state == RFCOMM_CLOSED_STATE:
-        return 'CLOSED' 
-    elif state == RFCOMM_OPENED_STATE:
-        return 'OPENED'
-    elif state == RFCOMM_DISC_WAIT_UA_STATE:
-        return 'DISC_WAIT_UA'
-    elif state == RFCOMM_TERM_WAIT_SEC_CHECK_STATE:
+        return 'CLOSED'
+    elif state== RFCOMM_TERM_WAIT_SEC_CHECK_STATE:
         return 'TERM_WAIT_SEC_CHECK'
+    elif state == RFCOMM_OPENED_STATE:
+        return 'OPEN'
+    elif state== RFCOMM_DISC_WAIT_UA_STATE:
+        return 'DISC_WAIT_UA'
     else:
-        return 'Invalid'
+        return 'Hidden'+str(state - 0x7)
 
 def parse_pkt(pkt):
     payload = {}
@@ -182,6 +182,7 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
 
 def closed_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
     sock = closed(target_addr)
+    print("[-] current state: closed")
     for _ in range(MUTATION_CNT): is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_CLOSED_STATE]).gen()), RFCOMM_CLOSED_STATE)
     sock.close()
     time.sleep(0.1)
@@ -189,6 +190,7 @@ def closed_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
 
 def term_wait_sec_check_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
     sock = term_wait_sec(target_addr)
+    print("[-] current state: t_w_sec_check")
     for _ in range(MUTATION_CNT): is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_TERM_WAIT_SEC_CHECK_STATE]).gen()), RFCOMM_TERM_WAIT_SEC_CHECK_STATE)
     sock.close()
     time.sleep(0.1)
@@ -196,6 +198,7 @@ def term_wait_sec_check_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAM
 
 def opened_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
     sock = opened_state(target_addr)
+    print("[-] current state: opened")
     for _ in range(MUTATION_CNT): is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_OPENED_STATE]).gen()), RFCOMM_OPENED_STATE,)
     sock.close()
     time.sleep(0.1)
@@ -203,12 +206,23 @@ def opened_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
 
 def disc_wait_ua_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
     sock = disc_wait_ua(target_addr)
+    print("[-] current state: disc_w_ua")
     for _ in range(MUTATION_CNT): is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_DISC_WAIT_UA_STATE]).gen()), RFCOMM_DISC_WAIT_UA_STATE)
     sock.close()
     time.sleep(0.1)
     return is_crashed
 
+def hidden_state_fuzzing(target_addr, state, state_frame=NORMAL_STATE_FRAME):
+    sock = hidden(target_addr, state)
+    print("[-] current state: "+state2str(state))
+    for _ in range(MUTATION_CNT): is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[state]).gen()), state)
+    sock.close()
+    time.sleep(0.1)
+    return is_crashed
+
+
 def mutation_in_normal_state(target_addr):
+    print("[-] normal mutation")
     is_crashed = closed_state_fuzzing(target_addr)
     if is_crashed: return True
     is_crashed = term_wait_sec_check_state_fuzzing(target_addr)
@@ -219,18 +233,26 @@ def mutation_in_normal_state(target_addr):
     if is_crashed: return True
 
 def mutation_in_adaptive_state(target_addr, adaptive_state_frame):
+    print("[-] adaptive mutation")
     if len(adaptive_state_frame[RFCOMM_CLOSED_STATE]) != 0:
         is_crashed = closed_state_fuzzing(target_addr, state_frame=adaptive_state_frame)
         if is_crashed: return True
-    elif len(adaptive_state_frame[RFCOMM_TERM_WAIT_SEC_CHECK_STATE]) != 0:
+    if len(adaptive_state_frame[RFCOMM_TERM_WAIT_SEC_CHECK_STATE]) != 0:
         is_crashed = term_wait_sec_check_state_fuzzing(target_addr, state_frame=adaptive_state_frame)
         if is_crashed: return True
-    elif len(adaptive_state_frame[RFCOMM_OPENED_STATE]) != 0:
+    if len(adaptive_state_frame[RFCOMM_OPENED_STATE]) != 0:
         is_crashed = opened_state_fuzzing(target_addr, state_frame=adaptive_state_frame)
         if is_crashed: return True
-    elif len(adaptive_state_frame[RFCOMM_DISC_WAIT_UA_STATE]) != 0:
+    if len(adaptive_state_frame[RFCOMM_DISC_WAIT_UA_STATE]) != 0:
         is_crashed = disc_wait_ua_state_fuzzing(target_addr, state_frame=adaptive_state_frame)
         if is_crashed: return True
+    #print(adaptive_state_frame)
+    # hidden state fuzzing
+    for state in adaptive_state_frame:
+        if state > 0x6:
+            if len(adaptive_state_frame[state]) != 0:
+                is_crashed = hidden_state_fuzzing(target_addr,state, state_frame=adaptive_state_frame)
+                if is_crashed: return True
 
 def logsave(loggerDict):
     loggerDict["end_time"] = str(datetime.now())

@@ -36,7 +36,7 @@ def state2str(state):
     elif state== RFCOMM_DISC_WAIT_UA_STATE:
         return 'DISC_WAIT_UA'
     else:
-        return 'Wrong'
+        return 'Hidden'+str(state - 0x7)
 
 def frame2str(frame):
     if frame == DM:
@@ -58,11 +58,16 @@ def parse_adaptive_state(state):
     ret = {}
     for idx, start_state in enumerate(state):
         frame_types = {}
-        for normal_state in NORMAL_STATE_FRAME[start_state]:
-            frame_types[frame2str(normal_state)] = state2str(STATE_LIST[(idx+1)%len(STATE_LIST)])
-        for hidden_state in bluedroid_hidden_state[start_state]:
-            if len(state[start_state]) != 0:
-                frame_types[frame2str(hidden_state)] = 'hidden state'
+        if start_state < 0x7:
+            for normal_state in NORMAL_STATE_FRAME[start_state]:
+                frame_types[frame2str(normal_state)] = state2str(STATE_LIST[(idx+1)%len(STATE_LIST)])
+            for hidden_state in bluedroid_hidden_state[start_state]:
+                if len(state[start_state]) != 0:
+                    frame_types[frame2str(hidden_state)] = 'hidden state'
+        else:
+            for hs in [DM, DISC, SABM, UA, UIH, DATA]:
+                if hs in state[start_state]:
+                    frame_types[frame2str(hs)] = 'hidden state'
         if len(frame_types) == 0:
             ret[state2str(start_state)] = "[]"
         else:
@@ -120,8 +125,19 @@ def disc_wait_ua(target_addr):
     sock.send(bytes(DISC.gen(transition=True)))
     return sock
 
+hidden_state_path = []
+
+def hidden(target_addr, state):
+    sock = bluetooth.BluetoothSocket(bluetooth.L2CAP)
+    sock.connect((target_addr, RFCOMM_PSM))
+    for f in hidden_state_path[state - 0x7]:
+        #print(f)
+        sock.send(bytes(f.gen(transition=True)))
+    return sock
+
 def construct_android_adaptive_sm(target_addr):
     print('Construct adaptive state machine...')
+    hidden_state = 0x7
     global bluedroid_hidden_state
     adaptive_state_frame = {
         RFCOMM_CLOSED_STATE: [],
@@ -138,6 +154,9 @@ def construct_android_adaptive_sm(target_addr):
                 if res:
                     if res != 'DM':
                         adaptive_state_frame[RFCOMM_CLOSED_STATE].append(frame)
+                        adaptive_state_frame[hidden_state] = []
+                        hidden_state += 1
+                        hidden_state_path.append([frame])
                 sock.close()
                 time.sleep(0.5)
             print('[*] CLOSED done')
@@ -148,6 +167,9 @@ def construct_android_adaptive_sm(target_addr):
                 if res:
                     if res != 'DM':
                         adaptive_state_frame[RFCOMM_TERM_WAIT_SEC_CHECK_STATE].append(frame)
+                        adaptive_state_frame[hidden_state] = []
+                        hidden_state += 1
+                        hidden_state_path.append([SABM, frame])
                 sock.close()
                 time.sleep(0.5)
             print('[*] TERM WAIT SEC CHECK done')
@@ -158,6 +180,9 @@ def construct_android_adaptive_sm(target_addr):
                 if res:
                     if res != 'DM':
                         adaptive_state_frame[RFCOMM_OPENED_STATE].append(frame)
+                        adaptive_state_frame[hidden_state] = []
+                        hidden_state += 1
+                        hidden_state_path.append([SABM,SABM, frame])
                 sock.close()
                 time.sleep(0.5)
             print('[*] OPENED done')
@@ -168,7 +193,25 @@ def construct_android_adaptive_sm(target_addr):
                 if res:
                     if res != 'DM':
                         adaptive_state_frame[RFCOMM_DISC_WAIT_UA_STATE].append(frame)
+                        adaptive_state_frame[hidden_state] = []
+                        hidden_state += 1
+                        hidden_state_path.append([SABM,SABM,DISC,frame])
                 sock.close()
                 time.sleep(0.5)
             print('[*] DISC WAIT UA done')
+
+    # pruning hiddend states
+
+    all_frame = [DM, DISC, SABM, UA, UIH, DATA]
+    for state in range(0x7, hidden_state):
+        for frame in all_frame:
+            sock = hidden(target_addr, state)
+            res = send_frame(sock, frame)
+            if res:
+                print("[-] state: "+ state2str(state)+", "+"res: "+res)
+                if res != 'DM':
+                    adaptive_state_frame[state].append(frame)
+            sock.close()
+            time.sleep(0.5)
+        print('[*] '+state2str(state)+' done')
     return adaptive_state_frame

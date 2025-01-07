@@ -29,6 +29,7 @@ def main():
     print(json.dumps(test_info, ensure_ascii=False, indent="\t"))
     print("======================================================\n")
     adaptive_state_frame = construct_android_adaptive_sm(target_addr)
+    #input()
     pprint(parse_adaptive_state(adaptive_state_frame))
     test_info["state machine"] = parse_adaptive_state(adaptive_state_frame)
     start_time = str(datetime.now())

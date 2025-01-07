@@ -38,7 +38,7 @@ class UIH(RFCOMM):
         return 'UIH'
     
     @classmethod
-    def gen(cls, mx_type=None):
+    def gen(cls, transition=False, mx_type=None):
         ret = UIH()
         ret.addr = 0b00000001
         ret.addr |= random.randint(0,1) << 1 # C/R

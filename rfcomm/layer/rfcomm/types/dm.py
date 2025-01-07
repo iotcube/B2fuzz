@@ -15,7 +15,7 @@ class DM(RFCOMM):
         return 'DM'
     
     @classmethod
-    def gen(cls):
+    def gen(cls, transition=False):
         ret = DM()
         ret.addr = 0b00000001
         ret.addr |= random.randint(0,1) << 1 # C/R
