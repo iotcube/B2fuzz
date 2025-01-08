@@ -181,42 +181,47 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
     return is_crashed
 
 def closed_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
-    sock = closed(target_addr)
     print("[-] current state: closed")
-    for _ in range(MUTATION_CNT): is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_CLOSED_STATE]).gen()), RFCOMM_CLOSED_STATE)
-    sock.close()
+    for _ in range(MUTATION_CNT): 
+        sock = closed(target_addr)
+        is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_CLOSED_STATE]).gen()), RFCOMM_CLOSED_STATE)
+        sock.close()
     time.sleep(0.1)
     return is_crashed
 
 def term_wait_sec_check_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
-    sock = term_wait_sec(target_addr)
     print("[-] current state: t_w_sec_check")
-    for _ in range(MUTATION_CNT): is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_TERM_WAIT_SEC_CHECK_STATE]).gen()), RFCOMM_TERM_WAIT_SEC_CHECK_STATE)
-    sock.close()
+    for _ in range(MUTATION_CNT):
+        sock = term_wait_sec(target_addr) 
+        is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_TERM_WAIT_SEC_CHECK_STATE]).gen()), RFCOMM_TERM_WAIT_SEC_CHECK_STATE)
+        sock.close()
     time.sleep(0.1)
     return is_crashed
 
 def opened_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
-    sock = opened_state(target_addr)
     print("[-] current state: opened")
-    for _ in range(MUTATION_CNT): is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_OPENED_STATE]).gen()), RFCOMM_OPENED_STATE,)
-    sock.close()
+    for _ in range(MUTATION_CNT): 
+        sock = opened_state(target_addr)
+        is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_OPENED_STATE]).gen()), RFCOMM_OPENED_STATE,)
+        sock.close()
     time.sleep(0.1)
     return is_crashed
 
 def disc_wait_ua_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
-    sock = disc_wait_ua(target_addr)
     print("[-] current state: disc_w_ua")
-    for _ in range(MUTATION_CNT): is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_DISC_WAIT_UA_STATE]).gen()), RFCOMM_DISC_WAIT_UA_STATE)
-    sock.close()
+    for _ in range(MUTATION_CNT): 
+        sock = disc_wait_ua(target_addr)
+        is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_DISC_WAIT_UA_STATE]).gen()), RFCOMM_DISC_WAIT_UA_STATE)
+        sock.close()
     time.sleep(0.1)
     return is_crashed
 
 def hidden_state_fuzzing(target_addr, state, state_frame=NORMAL_STATE_FRAME):
-    sock = hidden(target_addr, state)
     print("[-] current state: "+state2str(state))
-    for _ in range(MUTATION_CNT): is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[state]).gen()), state)
-    sock.close()
+    for _ in range(MUTATION_CNT): 
+        sock = hidden(target_addr, state)
+        is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[state]).gen()), state)
+        sock.close()
     time.sleep(0.1)
     return is_crashed
 
