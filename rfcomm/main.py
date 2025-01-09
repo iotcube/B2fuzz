@@ -38,6 +38,10 @@ def main():
     #test_info["starting_time"] = start_time
     #
     #fuzzing(target_addr, target_profile, target_profile_port, adaptive_state_frame, test_info)
-    open_channel(target_profile_port, target_addr)
+    c = 0
+    for _ in range(10):
+        if open_channel(target_profile_port, target_addr):
+            c += 1
+    print(f"crash: {c} / attempt: 10")    
 if __name__ == '__main__':
     main()

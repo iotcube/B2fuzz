@@ -153,7 +153,7 @@ def open_channel(channel, target_addr):
 
     
 
-        for i in range(0,289):
+        for i in range(0,290):
             try:
                 print(i)
                 sock.send(arr[i])
@@ -161,8 +161,9 @@ def open_channel(channel, target_addr):
             except bluetooth.btcommon.BluetoothError as e:
                 print(e)
                 print(i)
+                return e
 
-    return sock
+    return False
 
 
     
