@@ -15,10 +15,16 @@ class DISC(RFCOMM):
         return 'DISC'
 
     @classmethod
-    def gen(cls, transition=False):
+    def gen(cls, transition=False, channel=0):
         ret = DISC()
         if transition:
-            return b'\x03\x53\x01\xfd'
+            ret.addr = 0b00000001
+            ret.addr |= 1 << 1 # C/R
+            ret.addr |= 0 << 2 # Direction\
+            ret.addr |= channel << 3
+            ret.control = RFCOMM_CONTROL.RC_CONTROL_DISC
+            ret.length = 0
+            return bytes(ret)
         ret.addr = 0b00000001
         ret.addr |= random.randint(0,1) << 1 # C/R
         ret.addr |= random.randint(0,1) << 2 # Direction

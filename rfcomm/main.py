@@ -28,16 +28,16 @@ def main():
     print("\n===================Test Informatoin===================")
     print(json.dumps(test_info, ensure_ascii=False, indent="\t"))
     print("======================================================\n")
-    adaptive_state_frame = construct_android_adaptive_sm(target_addr)
-    #input()
-    pprint(parse_adaptive_state(adaptive_state_frame))
-    test_info["state machine"] = parse_adaptive_state(adaptive_state_frame)
-    start_time = str(datetime.now())
-    print('[*] Fuzzing Start...')
-    print(f'[*] Fuzzing Start Time : {start_time}')
-    test_info["starting_time"] = start_time
-    
-    fuzzing(target_addr, target_profile, target_profile_port, adaptive_state_frame, test_info)
-
+    #adaptive_state_frame = construct_android_adaptive_sm(target_addr)
+    ##input()
+    #pprint(parse_adaptive_state(adaptive_state_frame))
+    #test_info["state machine"] = parse_adaptive_state(adaptive_state_frame)
+    #start_time = str(datetime.now())
+    #print('[*] Fuzzing Start...')
+    #print(f'[*] Fuzzing Start Time : {start_time}')
+    #test_info["starting_time"] = start_time
+    #
+    #fuzzing(target_addr, target_profile, target_profile_port, adaptive_state_frame, test_info)
+    open_channel(target_profile_port, target_addr)
 if __name__ == '__main__':
     main()

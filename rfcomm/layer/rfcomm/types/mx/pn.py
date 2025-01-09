@@ -24,17 +24,28 @@ class PN:
         ret += bytes([self.type])
         ret += bytes([8*2+1])
         ret += bytes([self.DLCI])
-        ret += bytes([self.I << 4 + self.CL])
-        ret += bytes([self.P << 1])
+        ret += bytes([self.CL << 4 + self.I])
+        ret += bytes([self.P])
         ret += bytes([self.T])
-        ret += (self.N).to_bytes(2, byteorder='big') # 16 bits
-        ret += bytes([self.NA])
-        ret += bytes([self.K << 5])
+        ret += (self.N).to_bytes(2, byteorder='little') # 16 bits
+        ret += bytes([self.NA]) # max number of retransmission
+        ret += bytes([self.K]) # err recovery mode
         return ret
 
     @classmethod
-    def gen(cls):
+    def gen(cls, transition=False, channel=0):
         ret = PN()
+        if transition:
+            ret.type = MX_TYPE.MX_PN# + (random.randint(0,1)<<1)
+            ret.DLCI = channel << 1
+            ret.CL = 0b1111 # C1 ~ C4 = 0xf
+            ret.I = 0b0000  # I1 ~ I4 = 0x0
+            ret.P = 0
+            ret.T = 0
+            ret.N = 256
+            ret.NA = 0b00000000
+            ret.K = 7
+            return bytes(ret)
         ret.type = MX_TYPE.MX_PN# + (random.randint(0,1)<<1)
         ret.DLCI = random.randint(0, 31)
         ret.I = 0b1000

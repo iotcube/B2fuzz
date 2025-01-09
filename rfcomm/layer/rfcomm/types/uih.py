@@ -38,12 +38,27 @@ class UIH(RFCOMM):
         return 'UIH'
     
     @classmethod
-    def gen(cls, transition=False, mx_type=None):
+    def gen(cls,channel, channel_to_ctrl=0, transition=False, mx_type=None):
         ret = UIH()
+        if transition:
+            ret.addr = 0b00000001
+            ret.addr |= 1 << 1 # C/R
+            ret.addr |= 0 << 2 # Direction
+            ret.addr |= channel << 3
+            ret.control = RFCOMM_CONTROL.RC_CONTROL_UIH
+            if mx_type is None:
+                ret.data = random.choice(MX_TYPE).gen()
+            else:
+                ret.data = mx_type.gen(transition=transition, channel=channel_to_ctrl)
+            ret.length = len(ret.data)
+            return bytes(ret)
+        
+
         ret.addr = 0b00000001
-        ret.addr |= random.randint(0,1) << 1 # C/R
-        ret.addr |= random.randint(0,1) << 2 # Direction
+        ret.addr |= 1 << 1 # C/R
+        ret.addr |= 0 << 2 # Direction
         ret.control = RFCOMM_CONTROL.RC_CONTROL_UIH
+        ret.addr |= channel << 3
         if mx_type is None:
             ret.data = random.choice(MX_TYPE).gen()
         else:
