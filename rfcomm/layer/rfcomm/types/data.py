@@ -19,16 +19,16 @@ class DATA(RFCOMM):
         return 'UIH'
 
     @classmethod
-    def gen(cls,channel=0, transition=False):
+    def gen(cls,channel=0, transition=False, length=0):
         ret = DATA()
         if transition:
             ret.addr = 0b00000001
             ret.addr |= 1 << 1 # C/R
             ret.addr |= 0 << 2 # Direction
             ret.addr |= channel << 3
-            ret.control = RFCOMM_CONTROL.RC_CONTROL_UIH
-            ret.data = b"\xde\xad\xbe\xef"
-            ret.length = len(ret.data)
+            ret.control = RFCOMM_CONTROL.RC_CONTROL_UIH | 0b00010000 # P/F flag
+            ret.data = b"\x21"
+            ret.length = 0
             return bytes(ret)
         
         ret.addr = 0b00000001
@@ -36,6 +36,8 @@ class DATA(RFCOMM):
         ret.addr |= 0 << 2 # Direction
         ret.addr |= channel << 3
         ret.control = RFCOMM_CONTROL.RC_CONTROL_UIH
-        ret.length = random.randint(0, 127)
-        ret.data = gen_random_data(ret.length)
+
+        ret.data = b"\r\nAT+BSRF=671\r\n"#gen_random_data(ret.length)
+        ret.length = len(ret.data)#length
+        
         return ret

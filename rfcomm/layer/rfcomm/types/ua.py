@@ -15,11 +15,12 @@ class UA(RFCOMM):
         return 'UA'
 
     @classmethod
-    def gen(cls, transition=False):
+    def gen(cls, transition=False, channel =0):
         ret = UA()
         ret.addr = 0b00000001
-        ret.addr |= random.randint(0,1) << 1 # C/R
-        ret.addr |= random.randint(0,1) << 2 # Direction
+        ret.addr |= 0 << 1 # C/R
+        ret.addr |= 0 << 2 # Direction
+        ret.addr |= channel << 3
         ret.control = RFCOMM_CONTROL.RC_CONTROL_UA
         ret.length = 0
         return ret

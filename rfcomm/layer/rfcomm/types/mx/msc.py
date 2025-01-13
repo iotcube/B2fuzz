@@ -6,6 +6,7 @@ length = 2
 class MSC:
     def __init__(self):
         self.type = MX_TYPE.MX_MSC# + (random.randint(0,1)<<1)
+        self.DLCI = 0
         self.EA: int = 1
         self.FC: int = 0
         self.RTC: int = 0
@@ -22,7 +23,8 @@ class MSC:
     def __bytes__(self) -> bytes:
         ret = b''
         ret += bytes([self.type])
-        ret += bytes([17])
+        ret += bytes([5])
+        ret += bytes([self.DLCI])
         ret += bytes([
             (self.DV << 7) +
             (self.IC << 6) +
@@ -36,8 +38,19 @@ class MSC:
         return ret
     
     @classmethod
-    def gen(cls):
+    def gen(cls, transition=False, channel=0):
         ret = MSC()
+        if transition:
+            ret.DV = 1
+            ret.IC = 0
+            ret.RTR = 1
+            ret.RTC = 1
+            ret.FC = 0
+            ret.EA = 1
+            ret.DLCI = channel << 3 | 0b11 # EA == 1, one padding == 1
+            ret.reserved = 0
+            ret.reserved2 = 0
+            return bytes(ret)
         ret.DV = random.randint(0,1)
         ret.FC = random.randint(0,1)
         ret.IC = random.randint(0,1)
@@ -45,6 +58,6 @@ class MSC:
         ret.RTC = random.randint(0,1)
         ret.FC = random.randint(0,1)
         ret.EA = 1
-        ret.reserved = random.randint(0,1)
-        ret.reserved2 = random.randint(0,1)
+        ret.reserved =0
+        ret.reserved2 = 0
         return ret
