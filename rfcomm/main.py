@@ -47,27 +47,30 @@ def main():
     #open_channel(target_profile_port, target_addr)
     
     #open_rfcomm_channel(target_profile_port, target_addr)
-    sock, new_chan, dir = open_ch_n(target_addr, target_profile_port)
-    if sock:
-        if not new_chan:
-            print("[-] send pkt")
-            sock.send(bytes(DATA.gen(channel=target_profile_port, length=120)))
-            try:
-                res = sock.recv(MTU)
-            except:
-                print("[-] no res")
-                return False
-            print(f"[-] response: {res}")
-        else:
-            print("[-] send pkt")
-            sock.send(bytes(DATA.gen(channel=new_chan, length=120, dir=dir)))
-            try:
-                res = sock.recv(MTU)
-            except:
-                print("[-] no res")
-                return False
-            print(f"[-] response: {res}")
-    
+    #sock= open_ch_n(target_addr, target_profile_port)
+    #sock, new_dlci = open_new_chan(target_addr, target_profile_port)
+    #if sock:
+    #    sock = new_chan_msc(sock, new_dlci>>1, new_dlci&0b1)
+    #if sock:
+    #    if not new_chan:
+    #        print("[-] send pkt")
+    #        sock.send(bytes(DATA.gen(channel=target_profile_port, length=120)))
+    #        try:
+    #            res = sock.recv(MTU)
+    #        except:
+    #            print("[-] no res")
+    #            return False
+    #        print(f"[-] response: {res}")
+    #    else:
+    #        print("[-] send pkt")
+    #        sock.send(bytes(DATA.gen(channel=new_chan, length=120, dir=dir)))
+    #        try:
+    #            res = sock.recv(MTU)
+    #        except:
+    #            print("[-] no res")
+    #            return False
+    #        print(f"[-] response: {res}")
+    construct_sm(target_addr, target_profile_port)
     
 if __name__ == '__main__':
     main()

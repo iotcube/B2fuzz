@@ -23,14 +23,9 @@ class DATA(RFCOMM):
         ret = DATA()
         if transition:
             ret.addr = 0b00000001
-            print(bin(ret.addr))
             ret.addr |= 1 << 1 # C/R
-            print(bin(ret.addr))
             ret.addr |= dir << 2 # Direction
-            print(bin(ret.addr))
-            print(bin(channel))
             ret.addr |= channel << 3
-            print(bin(ret.addr))
             ret.control = RFCOMM_CONTROL.RC_CONTROL_UIH | 0b00010000 # P/F flag
             ret.data = b"\x21"
             ret.length = 0
@@ -43,7 +38,7 @@ class DATA(RFCOMM):
         ret.addr 
         ret.control = RFCOMM_CONTROL.RC_CONTROL_UIH
 
-        ret.data = b"\r\n+VGM=15\r\n"#gen_random_data(length)
+        ret.data = gen_random_data(length)
         ret.length = len(ret.data)#length
         
         return ret
