@@ -33,7 +33,7 @@ class PN:
         return ret
 
     @classmethod
-    def gen(cls, transition=False, channel=0):
+    def gen(cls, transition=False, channel=0, dir=0):
         ret = PN()
         if transition:
             ret.type = MX_TYPE.MX_PN# + (random.randint(0,1)<<1)

@@ -90,96 +90,96 @@ def msc_state(target_addr, channel):
                 print(f"[*] cannot open channel{channel}")
                 return False
     sock.send(UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel, transition=True, mx_type=PN))
-    sleep(0.1)
-    conn_rsp, sock = inter_recv(sock)
     sock.send(SABM.gen(channel=channel, transition=True))
-    sleep(0.1)
     try:
-        conn_rsp, sock = inter_recv(sock)
-    except:
-        print(f"[*] cannot open channel{channel}")
-        return False, False, None
-    frame_pkt = FRAME_PKT(conn_rsp)
-    res = frame_pkt.parse_pkt()
-    if res:
-        if res != "UA":
-            print(f"[*] cannot open channel{channel}")
-            return False, False, None
-    try:    
         while True:
             conn_rsp, sock = inter_recv(sock)
-            if conn_rsp[3] == 0xe3 or conn_rsp[3] == 0xe1:
-                sock.send(b'\x03' + conn_rsp[1:-1]+b"\x70")
-                sleep(0.1)
-                break
+            frame_pkt = FRAME_PKT(conn_rsp)
+            res = frame_pkt.parse_pkt()
+            if res:
+                if res == "UA":
+                    break
+                elif res == "UIH":
+                    continue
+                else:
+                    print(f"[*] cannot open channel{channel}")
+                    return False
     except:
-        print("NO MSC")
-        return sock, True, None, 0
-    #try:
-    #except:
-    #    return sock, False, conn_rsp, 0
-    #if conn_rsp2[3] == 0x83: # Onother PN?
-    #    
-    #    resp_rsp2 = b'\x03' + conn_rsp2[1:]
-    #    resp_rsp2 = resp_rsp2[:3]+b"\x81"+resp_rsp2[4:]
-    #    resp_rsp2 = resp_rsp2[:6]+b"\xe0"+resp_rsp2[7:]
-    #    sock.send(resp_rsp2)
-    #    data = sock.recv(MTU)
-    #    sock.send(bytes(UA.gen(transition=True, channel=conn_rsp2[5]>>1)))
-    #    sock.send(DATA.gen(transition=True, channel=conn_rsp2[5]>>1))
-    #    print(f"[*] new channel{conn_rsp2[5]>>1} connection ")
-    #    
-    #    return sock, False, False, conn_rsp2[5]>>1
+        print(f"[*] cannot open channel{channel}")
+        return False
 
-    return sock, False, None, 0
+    #try:    
+    #    while True:
+    #        conn_rsp, sock = inter_recv(sock)
+    #        if conn_rsp[3] == 0xe3 or conn_rsp[3] == 0xe1:
+    #            sock.send(b'\x03' + conn_rsp[1:-1]+b"\x70")
+    #            sleep(0.1)
+    #            break
+    #except:
+    #    print("NO MSC")
+    return sock 
 
 
 def open_ch_n(target_addr, channel):
-    sock, is_master, conn_rsp, new_chan = msc_state(target_addr, channel)
-    print(is_master)
+    sock= msc_state(target_addr, channel)
     if sock:
-        if is_master:
-            sock.send(UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel, transition=True, mx_type=MSC))
-            conn_rsp, sock = inter_recv(sock)
-            print(conn_rsp.hex())
-            conn_rsp, sock = inter_recv(sock)
-            print(conn_rsp.hex())
-            sock.send(b'\x03' + conn_rsp[1:])
-
-            # Credite
-            sock.send(DATA.gen(transition=True, channel=channel))
-            return sock, None
-        else:
-            print("MSC state")
-            is_new_chan = False
+        sock.send(UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel, transition=True, mx_type=MSC))
+        
+        try:
             while True:
-                try:
-                    conn_rsp, sock = inter_recv(sock) 
-                    if conn_rsp[3] == 0xe3 or conn_rsp[3] == 0xe1:
-                        sock.send(b'\x03' + conn_rsp[1:-1]+b"\x70")
-                        
+                conn_rsp, sock = inter_recv(sock)
+                if conn_rsp[3] == 0xe3:
+                    sock.send(b'\x03' + conn_rsp[1:3]+b"\xe1"+conn_rsp[4:-1]+b"\xaa")
+                elif conn_rsp[3] == 0xe1:
+                    break
+        except:
+            print("[*] cannot MSC")
 
-                    elif conn_rsp[3] == 0x83: # Onother PN?
-                        #sock.send(DATA.gen(transition=True, channel=channel))    
-                        resp_rsp2 = b'\x03' + conn_rsp[1:]
-                        resp_rsp2 = resp_rsp2[:3]+b"\x81"+resp_rsp2[4:]
-                        resp_rsp2 = resp_rsp2[:6]+b"\xe0"+resp_rsp2[7:]
-                        sock.send(resp_rsp2)
-                        data = sock.recv(MTU)
-                        sock.send(bytes(UA.gen(transition=True, channel=conn_rsp[5]>>1)))
-                        print(f"[*] new channel{conn_rsp[5]>>1} connection ")
-                        is_new_chan = True
-                except:
+        # Credite
+        sock.send(DATA.gen(transition=True, channel=channel))
+        is_new_chan = False
+        try:
+            while True:
+                conn_rsp, sock = inter_recv(sock)
+                if conn_rsp[3] == 0x83: # Onother PN?
+                    #sock.send(DATA.gen(transition=True, channel=channel))    
+                    resp_rsp2 = b'\x03' + conn_rsp[1:]
+                    resp_rsp2 = resp_rsp2[:3]+b"\x81"+resp_rsp2[4:]
+                    resp_rsp2 = resp_rsp2[:6]+b"\xe0"+resp_rsp2[7:]
+                    sock.send(resp_rsp2)
+                    data = sock.recv(MTU)
+                    new_ch = conn_rsp[5]
+                    sock.send(bytes(UA.gen(transition=True, channel=new_ch>>1, dir=new_ch&0b1)))
+                    print(f"[*] new channel{conn_rsp[5]>>1} connection ")
+                    is_new_chan = True
+                    sock.send(UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=new_ch>>1, transition=True, mx_type=MSC, dir=new_ch&0b1))
                     try:
-                        conn_rsp, sock = inter_recv(sock)
+                        while True:
+                            conn_rsp, sock = inter_recv(sock)
+                            print(conn_rsp[3] == 0xe1)
+                            if conn_rsp[3] == 0xe3:
+                                sock.send(b'\x03' + conn_rsp[1:3]+b"\xe1"+conn_rsp[4:-1]+b"\xaa")
+                            elif conn_rsp[3] == 0xe1:
+                                print("[*] is here??")
+                                sock.send(DATA.gen(transition=True, channel=new_ch>>1, dir=new_ch&0b1))
+                                break
                     except:
-                        sock.send(DATA.gen(transition=True, channel=channel))
-                    if is_new_chan:
-                        return sock, conn_rsp[5]>>1
-                    else:
-                        return sock, False
-    else: 
+                        print("[-] no msc")
+                    break
+                
+                else:
+                    print(conn_rsp)
+                    break
+        except:
+            print("[-] no additional ch open")
+        
+        if is_new_chan:
+            return sock, new_ch>>1, new_ch&0b1
+        else:
+            return sock, False, None
+    else:
         return False
+
 
 def open_channel(channel, target_addr):
     global ctrl_current_state

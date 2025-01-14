@@ -38,7 +38,7 @@ class MSC:
         return ret
     
     @classmethod
-    def gen(cls, transition=False, channel=0):
+    def gen(cls, transition=False, channel=0, dir=0):
         ret = MSC()
         if transition:
             ret.DV = 1
@@ -47,7 +47,7 @@ class MSC:
             ret.RTC = 1
             ret.FC = 0
             ret.EA = 1
-            ret.DLCI = channel << 3 | 0b11 # EA == 1, one padding == 1
+            ret.DLCI = channel << 3 | dir << 2 | 0b11 # EA == 1, one padding == 1
             ret.reserved = 0
             ret.reserved2 = 0
             return bytes(ret)

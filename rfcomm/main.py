@@ -47,7 +47,7 @@ def main():
     #open_channel(target_profile_port, target_addr)
     
     #open_rfcomm_channel(target_profile_port, target_addr)
-    sock, new_chan = open_ch_n(target_addr, target_profile_port)
+    sock, new_chan, dir = open_ch_n(target_addr, target_profile_port)
     if sock:
         if not new_chan:
             print("[-] send pkt")
@@ -60,8 +60,7 @@ def main():
             print(f"[-] response: {res}")
         else:
             print("[-] send pkt")
-            sock.send(bytes(DATA.gen(channel=target_profile_port, length=120)))
-            sock.send(bytes(DATA.gen(channel=new_chan, length=120)))
+            sock.send(bytes(DATA.gen(channel=new_chan, length=120, dir=dir)))
             try:
                 res = sock.recv(MTU)
             except:
