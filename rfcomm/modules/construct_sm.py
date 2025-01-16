@@ -6,6 +6,8 @@ def state2str(state):
         return "closed_state"
     elif state == OPENED_CTRL_CH:
         return "opened_ctrl_channel_state"
+    elif state == CLOSED_NORMAL_CH:
+        return "closed normal ch"
     elif state == OPENED_NORMAL_CH:
         return "opened_normal_channel_state"
     elif state == OPENED_NORMAL_CH_WITH_MSC:
@@ -30,10 +32,13 @@ def construct_sm(target_addr, channel):
 
         sock = msc_state(target_addr, channel)
         if sock:
-            ret[channel][OPENED_NORMAL_CH] = []
+            ret[channel][CLOSED_NORMAL_CH] = []
+            if establish_dlci(sock, channel):
+                ret[channel][OPENED_NORMAL_CH] = []
             sock.close()
 
-        sock = open_ch_n(target_addr, channel)
+
+        sock, _ = open_ch_n(target_addr, channel)
         if sock:
             ret[channel][OPENED_NORMAL_CH_WITH_MSC] = []
             sock.close()
@@ -41,7 +46,10 @@ def construct_sm(target_addr, channel):
         sock, new_dlci = open_new_chan(target_addr, channel)
         if sock:
             # ADD new channel SM
-            ret[new_dlci>>1][OPENED_NORMAL_CH] = []
+            ret[new_dlci>>1][CLOSED_NORMAL_CH] = []
+            sock = establish_new_dlci(sock, new_dlci)
+            if sock:
+                ret[new_dlci>>1][OPENED_NORMAL_CH] = []
             sock, msc = new_chan_msc(sock, new_dlci>>1, new_dlci&0b1)
             if msc:
                 ret[new_dlci>>1][OPENED_NORMAL_CH_WITH_MSC] = []

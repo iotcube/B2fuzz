@@ -26,15 +26,16 @@ from layer.rfcomm.types.data import DATA
 
 CLOSED = 0
 OPENED_CTRL_CH = 1
-OPENED_NORMAL_CH = 2
-OPENED_NORMAL_CH_WITH_MSC = 3
+CLOSED_NORMAL_CH = 2
+OPENED_NORMAL_CH = 3
+OPENED_NORMAL_CH_WITH_MSC = 4
 
 
 CTRL_CHANNEL = 0
 
 RFCOMM_FRAME = [DM, DISC, SABM, UA, UIH, DATA]
 
-new_state = 4
+new_state = 5
 
 def closed(target_addr):
     global ctrl_current_state
@@ -65,17 +66,14 @@ def msc_state(target_addr, channel):
     # enable ctrl channel
     sock = opened_ctrl_ch(target_addr)
     sock.send(UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel, transition=True, mx_type=PN))
-    sock.send(SABM.gen(channel=channel, transition=True))
     try:
         while True:
             conn_rsp, sock = inter_recv(sock)
             frame_pkt = FRAME_PKT(conn_rsp)
             res = frame_pkt.parse_pkt()
             if res:
-                if res == "UA":
+                if res == "UIH":
                     break
-                elif res == "UIH":
-                    continue
                 else:
                     print(f"[*] cannot open channel{channel}")
                     return False
@@ -86,31 +84,35 @@ def msc_state(target_addr, channel):
     return sock 
 
 
-def open_ch_n(target_addr, channel):
-    sock= msc_state(target_addr, channel)
-    if sock:
-        sock.send(UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel, transition=True, mx_type=MSC))
-        
-        try:
-            while True:
-                conn_rsp, sock = inter_recv(sock)
-                if conn_rsp[3] == 0xe3:
-                    sock.send(b'\x03' + conn_rsp[1:3]+b"\xe1"+conn_rsp[4:-1]+b"\xaa")
-                elif conn_rsp[3] == 0xe1:
+def establish_dlci(sock, channel):
+    sock.send(SABM.gen(channel=channel, transition=True))
+    try:
+        while True:
+            conn_rsp, sock = inter_recv(sock)
+            frame_pkt = FRAME_PKT(conn_rsp)
+            res = frame_pkt.parse_pkt()
+            if res:
+                if res == "UA":
                     break
-        except:
-            print("[*] cannot MSC")
-            sock.send(DATA.gen(transition=True, channel=channel))
-            return False
-
-        # Credite
-        sock.send(DATA.gen(transition=True, channel=channel))
-        return sock
-    else:
+                else:
+                    print(f"[*] cannot open channel{channel}")
+                    return False
+    except:
+        print(f"[*] cannot open channel{channel}")
         return False
 
+    return sock 
+
+def open_ch_n(target_addr, channel):
+    sock= msc_state(target_addr, channel)
+    sock = establish_dlci(sock, channel)
+    if sock:
+        return new_chan_msc(sock, channel, 0)
+    else:
+        return False, False
+
 def open_new_chan(target_addr, channel):
-    sock = open_ch_n(target_addr, channel)
+    sock, _ = open_ch_n(target_addr, channel)
     is_new_chan = False
     try:
         while True:
@@ -121,9 +123,7 @@ def open_new_chan(target_addr, channel):
                 resp_rsp2 = resp_rsp2[:3]+b"\x81"+resp_rsp2[4:]
                 resp_rsp2 = resp_rsp2[:6]+b"\xe0"+resp_rsp2[7:]
                 sock.send(resp_rsp2)
-                data = sock.recv(MTU)
                 new_ch = conn_rsp[5]
-                sock.send(bytes(UA.gen(transition=True, channel=new_ch>>1, dir=new_ch&0b1)))
                 is_new_chan = True
                 break
     except:
@@ -133,6 +133,26 @@ def open_new_chan(target_addr, channel):
         return sock, new_ch
     else:
         return False, False
+
+def establish_new_dlci(sock, new_ch):
+    try:
+        while True:
+            conn_rsp, sock = inter_recv(sock)
+            frame_pkt = FRAME_PKT(conn_rsp)
+            res = frame_pkt.parse_pkt()
+            if res:
+                if res == "SABM":
+                    sock.send(bytes(UA.gen(transition=True, channel=new_ch>>1, dir=new_ch&0b1)))
+                    break
+                else:
+                    print(f"[*] cannot open channel{new_ch}")
+                    return False
+            
+    except:
+        print(f"[*] cannot open channel{new_ch}")
+        return False
+
+    return sock 
 
 
 def new_chan_msc(sock, channel, dir):
