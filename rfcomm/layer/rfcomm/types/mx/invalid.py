@@ -17,7 +17,7 @@ class INVALID:
         return ret
     
     @classmethod
-    def gen(cls):
+    def gen(cls, transition=False, channel=0, dir=0):
         ret = INVALID()
         ret.type = (random.randint(0, 63) << 2) + (0<<1) + 1
         return bytes(ret)

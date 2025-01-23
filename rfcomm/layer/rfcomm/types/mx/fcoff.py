@@ -17,7 +17,7 @@ class FCOFF:
         return ret
     
     @classmethod
-    def gen(cls, transition=False):
+    def gen(cls, transition=False, channel=0, dir=0):
         ret = FCOFF()
         ret.type =  MX_TYPE.MX_FCOFF + (1<<1)
         return bytes(ret)

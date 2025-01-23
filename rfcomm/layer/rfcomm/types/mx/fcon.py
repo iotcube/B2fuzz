@@ -17,7 +17,7 @@ class FCON:
         return ret
     
     @classmethod
-    def gen(cls, transition=False):
+    def gen(cls, transition=False, channel=0, dir=0):
         ret = FCON()
         ret.type =  MX_TYPE.MX_FCON + (1<<1)
         return bytes(ret)
