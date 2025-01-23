@@ -157,20 +157,20 @@ def establish_new_dlci(sock, new_ch):
 
 def new_chan_msc(sock, channel, dir):
     sock.send(UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel, transition=True, mx_type=MSC, dir=dir))
-        
+    is_msc = False    
     try:
         while True:
             conn_rsp, sock = inter_recv(sock)
             if conn_rsp[3] == 0xe3:
                 sock.send(b'\x03' + conn_rsp[1:3]+b"\xe1"+conn_rsp[4:-1]+b"\xaa")
+                is_msc = True
             elif conn_rsp[3] == 0xe1:
-                break
+                continue
     except:
-        print("[*] cannot MSC")
-        return sock, False
+        pass
     # Credite
     sock.send(DATA.gen(transition=True, channel=channel, dir=dir))
-    return sock, True
+    return sock, is_msc
 
 def find_state(sock):
     is_new_state = False

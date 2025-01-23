@@ -15,44 +15,45 @@ def state2str(state):
     else:
         return f"new state{state - 4}"
 
+
 def construct_sm(target_addr, channel):
     ret = defaultdict(dict)
     try:
         # can connect
         sock = closed(target_addr)
         if sock:
-            ret[CTRL_CHANNEL][CLOSED] = []
+            ret[CTRL_CHANNEL][CLOSED] = [SABM]
             sock.close()
 
         # can open ctrl channel
         sock = opened_ctrl_ch(target_addr)
         if sock:
-            ret[CTRL_CHANNEL][OPENED_CTRL_CH] = []
+            ret[CTRL_CHANNEL][OPENED_CTRL_CH] = [DISC, PN]
             sock.close()
 
-        sock = msc_state(target_addr, channel)
+        sock = closed_normal_ch(target_addr, channel)
         if sock:
-            ret[channel][CLOSED_NORMAL_CH] = []
+            ret[channel][CLOSED_NORMAL_CH] = [SABM]
             if establish_dlci(sock, channel):
-                ret[channel][OPENED_NORMAL_CH] = []
+                ret[channel][OPENED_NORMAL_CH] = [DISC, MSC]
             sock.close()
 
 
-        sock, _ = open_ch_n(target_addr, channel)
+        sock, _ = open_normal_ch_with_msc(target_addr, channel)
         if sock:
-            ret[channel][OPENED_NORMAL_CH_WITH_MSC] = []
+            ret[channel][OPENED_NORMAL_CH_WITH_MSC] = [DATA, DISC]
             sock.close()
 
         sock, new_dlci = open_new_chan(target_addr, channel)
         if sock:
             # ADD new channel SM
-            ret[new_dlci>>1][CLOSED_NORMAL_CH] = []
+            ret[new_dlci>>1][CLOSED_NORMAL_CH] = [SABM]
             sock = establish_new_dlci(sock, new_dlci)
             if sock:
-                ret[new_dlci>>1][OPENED_NORMAL_CH] = []
+                ret[new_dlci>>1][OPENED_NORMAL_CH] = [DISC, MSC]
             sock, msc = new_chan_msc(sock, new_dlci>>1, new_dlci&0b1)
             if msc:
-                ret[new_dlci>>1][OPENED_NORMAL_CH_WITH_MSC] = []
+                ret[new_dlci>>1][OPENED_NORMAL_CH_WITH_MSC] = [DATA, DISC]
             sock.close()
     except:
         pass
