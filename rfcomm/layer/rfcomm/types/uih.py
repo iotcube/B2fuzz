@@ -64,4 +64,4 @@ class UIH(RFCOMM):
         else:
             ret.data = mx_type.gen()
         ret.length = ret.data.length
-        return ret
+        return bytes(ret)

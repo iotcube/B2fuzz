@@ -142,7 +142,7 @@ def establish_new_dlci(sock, new_ch):
             res = frame_pkt.parse_pkt()
             if res:
                 if res == "SABM":
-                    sock.send(bytes(UA.gen(transition=True, channel=new_ch>>1, dir=new_ch&0b1)))
+                    sock.send(UA.gen(transition=True, channel=new_ch>>1, dir=new_ch&0b1))
                     break
                 else:
                     print(f"[*] cannot open channel{new_ch}")
@@ -165,7 +165,7 @@ def new_chan_msc(sock, channel, dir):
                 sock.send(b'\x03' + conn_rsp[1:3]+b"\xe1"+conn_rsp[4:-1]+b"\xaa")
                 is_msc = True
             elif conn_rsp[3] == 0xe1:
-                continue
+                break
     except:
         pass
     # Credite

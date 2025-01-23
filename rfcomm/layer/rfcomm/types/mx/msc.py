@@ -60,4 +60,4 @@ class MSC:
         ret.EA = 1
         ret.reserved =0
         ret.reserved2 = 0
-        return ret
+        return bytes(ret)

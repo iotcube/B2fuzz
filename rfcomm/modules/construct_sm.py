@@ -1,4 +1,5 @@
 from modules import *
+from .pairing import *
 from collections import defaultdict
 
 def state2str(state):

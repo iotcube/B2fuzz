@@ -16,7 +16,7 @@ class TEST:
         return ret
     
     @classmethod
-    def gen(cls):
+    def gen(cls, transition=False, channel=0, dir=0):
         ret = TEST()
         ret.type = MX_TYPE.MX_TEST + (1<<1)
-        return ret
+        return bytes(ret)

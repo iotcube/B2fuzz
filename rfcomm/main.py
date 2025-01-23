@@ -69,11 +69,8 @@ def main():
     #            print("[-] no res")
     #            return False
     #        print(f"[-] response: {res}")
-    #construct_sm(target_addr, target_profile_port)
-    sock , _= open_normal_ch_with_msc(target_addr, target_profile_port)
-    sleep(1)
-    for _ in range(300):
-        sock.send(bytes(DATA.gen(channel=target_profile_port, transition=False, length=100)))
+    construct_sm(target_addr, target_profile_port)
+
 
 if __name__ == '__main__':
     main()

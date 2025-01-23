@@ -20,4 +20,4 @@ class INVALID:
     def gen(cls):
         ret = INVALID()
         ret.type = (random.randint(0, 63) << 2) + (0<<1) + 1
-        return ret
+        return bytes(ret)

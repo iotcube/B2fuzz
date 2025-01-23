@@ -41,4 +41,4 @@ class DATA(RFCOMM):
         ret.data = gen_random_data(length)
         ret.length = len(ret.data)#length
         
-        return ret
+        return bytes(ret)

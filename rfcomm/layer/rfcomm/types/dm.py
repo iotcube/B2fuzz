@@ -22,4 +22,4 @@ class DM(RFCOMM):
         ret.addr |= random.randint(0,1) << 2 # Direction
         ret.control = RFCOMM_CONTROL.RC_CONTROL_DM
         ret.length = 0
-        return ret
+        return bytes(ret)

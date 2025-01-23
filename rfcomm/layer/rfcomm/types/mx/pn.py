@@ -55,5 +55,5 @@ class PN:
         ret.N = random.randint(0, 0xffff)
         ret.NA = 0b00000000
         ret.K = random.randint(0, 7)
-        return ret
+        return bytes(ret)
     

@@ -23,4 +23,4 @@ class UA(RFCOMM):
         ret.addr |= channel << 3
         ret.control = RFCOMM_CONTROL.RC_CONTROL_UA
         ret.length = 0
-        return ret
+        return bytes(ret)

@@ -30,4 +30,4 @@ class DISC(RFCOMM):
         ret.addr |= random.randint(0,1) << 2 # Direction
         ret.control = RFCOMM_CONTROL.RC_CONTROL_DISC
         ret.length = 0
-        return ret
+        return bytes(ret)

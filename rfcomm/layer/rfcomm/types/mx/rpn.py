@@ -40,7 +40,7 @@ class RPN:
         ret += bytes([17])
         ret += bytes([
             self.EA +
-            (0<<1) +
+            (1<<1) +
             (self.DLCI << 2)
         ])
         ret += bytes([
@@ -64,10 +64,10 @@ class RPN:
         return ret
     
     @classmethod
-    def gen(cls):
+    def gen(cls, transition=False, channel=0, dir=0):
         ret = RPN()
         ret.type = MX_TYPE.MX_RPN
-        ret.DLCI = random.randint(0, 31)
+        ret.DLCI = channel << 1 | dir
         ret.EA = 1
         ret.BR = random.randint(0, 8) # RFCOMM_RPN_BR_230400 = 8
         ret.DB = 3 #random.randint(0, 4)
@@ -90,4 +90,4 @@ class RPN:
         ret.PM_output_RTR = random.randint(0, 1)
         ret.PM_input_RTC = random.randint(0, 1)
         ret.PM_output_RTC = random.randint(0, 1)
-        return ret
+        return bytes(ret)

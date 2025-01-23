@@ -32,4 +32,4 @@ class SABM(RFCOMM):
         ret.control = RFCOMM_CONTROL.RC_CONTROL_SABM
         ret.addr |= channel << 3 # channel
         ret.length = 0
-        return ret
+        return bytes(ret)
