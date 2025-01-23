@@ -15,7 +15,7 @@ class UA(RFCOMM):
         return 'UA'
 
     @classmethod
-    def gen(cls, transition=False, channel =0, dir=0):
+    def gen(cls,channel=0, transition=False, length=0, dir=0):
         ret = UA()
         ret.addr = 0b00000001
         ret.addr |= 0 << 1 # C/R

@@ -19,6 +19,9 @@ class RLS:
         ret += bytes([self.line_status])
         return ret
 
+    def name():
+        return 'RLS'
+
     @classmethod
     def gen(cls, transition=False, channel=0, dir=0):
         ret = RLS()

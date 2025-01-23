@@ -1,6 +1,15 @@
 from modules import *
 from .pairing import *
 from collections import defaultdict
+import copy
+import os
+
+hidden_state_path = []
+
+
+def delete_paired_dev(target_addr):
+    os.system(f"bluetoothctl disconnect {target_addr}")
+    os.system(f"bluetoothctl remove {target_addr}")
 
 def state2str(state):
     if state == CLOSED:
@@ -15,6 +24,10 @@ def state2str(state):
         return "opened normal channel(after msc)"
     else:
         return f"new state{state - 4}"
+
+def frame2str(frame):
+    return frame.name()
+
 
 
 def construct_sm(target_addr, channel):
@@ -67,8 +80,118 @@ def print_sm(sm):
     for ch in sm:
         per_ch_sm = {}
         for state in sm[ch]:
-            per_ch_sm[state2str(state)] = sm[ch][state]
+            per_ch_sm[state2str(state)] = [f.name() for f in sm[ch][state]]
         ret[f"channel{ch}"] = per_ch_sm
     return ret
     
+def recv_pkt(sock):
+    conn_rsp, sock = inter_recv(sock)
+    if conn_rsp == None:
+        print('[*] recv failed.')
+        return None, None
+    else:  
+        frame_pkt = FRAME_PKT(conn_rsp)
+        control = frame_pkt.parse_pkt()
+        return control, conn_rsp
 
+def send_frame(sock, frame, ch, state, channel_to_ctrl, base_sm, ret_sm, path):
+    global new_state
+    global hidden_state_path
+    if frame not in RFCOMM_CMD:
+        sock.send(frame.gen())
+    else:
+        sock.send(UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel_to_ctrl, transition=True, mx_type=frame))
+    try:
+        rsp_type, conn_rsp = recv_pkt(sock)
+        # not NSC
+        if (rsp_type and (rsp_type != "DM" and rsp_type != "DISC")) and \
+            (conn_rsp and conn_rsp[3] != 0x11) and \
+            (frame not in base_sm[ch][state]):
+            ret_sm[ch][state].append(frame)
+            ret_sm[ch][new_state] = []
+            hidden_state_path.append([(path, frame)])
+            new_state += 1
+    except:
+        sock.close()
+        return False
+    return True
+
+
+def expand_sm(sm, initial_channel, target_addr):
+    ret = copy.deepcopy(sm)
+    global new_state
+    try:
+        for ch in sm:
+            if ch == CTRL_CHANNEL:
+                for state in sm[ch]:
+                    if state == CLOSED:
+                        for frame in RFCOMM_FRAME + RFCOMM_CMD:
+                            sock = closed(target_addr)
+                            if sock and send_frame(sock, frame, ch,state,CTRL_CHANNEL, sm, ret, closed):
+                                sock.close()
+                        print("[*] CLOSED done")
+
+
+                    elif state == OPENED_CTRL_CH:
+                        for frame in RFCOMM_CMD:
+                            sock = opened_ctrl_ch(target_addr)
+                            if sock and send_frame(sock, frame, ch, state,CTRL_CHANNEL, sm, ret, opened_ctrl_ch):
+                                sock.close()
+                        print("[*] OPENED_CTRL_CH done")
+
+
+            elif ch == initial_channel:
+                for state in sm[ch]:
+                    if state == CLOSED_NORMAL_CH:
+                        for frame in RFCOMM_FRAME + RFCOMM_CMD:
+                            sock = closed_normal_ch(target_addr, initial_channel)
+                            if sock and send_frame(sock, frame, ch, state, initial_channel, sm, ret, closed_normal_ch):
+                                sock.close()
+                        print("[*] CLOSED_NORMAL_CH done")
+
+                    elif state == OPENED_NORMAL_CH:
+                        for frame in RFCOMM_CMD:
+                            sock = open_normal_ch(target_addr, initial_channel)
+                            if sock and send_frame(sock, frame, ch, state, initial_channel, sm, ret, open_normal_ch):
+                                sock.close()
+                        print("[*] OPENED_NORMAL_CH done")
+
+
+                    elif state == OPENED_NORMAL_CH_WITH_MSC:
+                        for frame in RFCOMM_FRAME + RFCOMM_CMD:
+                            sock, _ = open_normal_ch_with_msc(target_addr, initial_channel)
+                            if sock and send_frame(sock, frame, ch, state, initial_channel, sm, ret, open_normal_ch_with_msc):
+                                sock.close()
+                        print("[*] OPENED_NORMAL_CH_WITH_MSC done")
+            else:
+                for state in sm[ch]:
+                    if state == CLOSED_NORMAL_CH:
+                        for frame in RFCOMM_FRAME + RFCOMM_CMD:
+                            sock = open_new_chan(target_addr, initial_channel)
+                            if sock and send_frame(sock, frame, ch, state, ch, sm, ret, open_new_chan):
+                                sock.close()
+                        print("[*] CLOSED_NORMAL_CH done")
+                    elif state == OPENED_NORMAL_CH:
+                        for frame in RFCOMM_FRAME + RFCOMM_CMD:
+                            sock , new_dlci= open_new_chan(target_addr, initial_channel)
+                            if sock:
+                                sock = establish_dlci(sock, new_dlci)
+                            if sock and send_frame(sock, frame, ch, state, ch, sm, ret, open_new_chan):
+                                sock.close()
+                        print("[*] OPENED_NORMAL_CH done")
+                    elif state == OPENED_NORMAL_CH_WITH_MSC:
+                        for frame in RFCOMM_FRAME + RFCOMM_CMD:
+                            sock , new_dlci= open_new_chan(target_addr, initial_channel)
+                            if sock:
+                                sock = establish_dlci(sock, new_dlci)
+                            if sock:
+                                sock, msc = new_chan_msc(sock, new_dlci>>1, new_dlci&0b1)
+                            if sock and send_frame(sock, frame, ch, state, ch, sm, ret, open_new_chan):
+                                sock.close()
+                        print("[*] OPENED_NORMAL_CH_WITH_MSC done")
+    except:
+        pprint(print_sm(ret))
+        print(hidden_state_path)
+        return False
+    pprint(print_sm(ret))
+    print(hidden_state_path)

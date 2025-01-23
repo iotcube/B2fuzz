@@ -38,7 +38,7 @@ class UIH(RFCOMM):
         return 'UIH'
     
     @classmethod
-    def gen(cls,channel, channel_to_ctrl=0, transition=False, mx_type=None, dir=0):
+    def gen(cls,channel=0, channel_to_ctrl=0, transition=False, mx_type=None, dir=0):
         ret = UIH()
         if transition:
             ret.addr = 0b00000001
@@ -63,5 +63,5 @@ class UIH(RFCOMM):
             ret.data = random.choice(MX_TYPE).gen()
         else:
             ret.data = mx_type.gen()
-        ret.length = ret.data.length
+        ret.length = len(ret.data)
         return bytes(ret)

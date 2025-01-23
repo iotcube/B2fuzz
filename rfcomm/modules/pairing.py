@@ -34,11 +34,10 @@ OPENED_NORMAL_CH_WITH_MSC = 4
 CTRL_CHANNEL = 0
 
 RFCOMM_FRAME = [DM, DISC, SABM, UA, UIH, DATA]
-
+RFCOMM_CMD = [FCON, FCOFF, INVALID, MSC, NSC, PN, RLS, RPN, TEST]
 new_state = 5
 
 def closed(target_addr):
-    global ctrl_current_state
     sock = bluetooth.BluetoothSocket(bluetooth.L2CAP)
     sock.connect((target_addr, RFCOMM_PSM))
     return sock
@@ -102,6 +101,12 @@ def establish_dlci(sock, channel):
         return False
 
     return sock 
+
+def open_normal_ch(target_addr, channel):
+    sock= closed_normal_ch(target_addr, channel)
+    if sock:
+        sock = establish_dlci(sock, channel)
+    return sock
 
 def open_normal_ch_with_msc(target_addr, channel):
     sock= closed_normal_ch(target_addr, channel)

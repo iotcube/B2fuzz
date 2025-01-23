@@ -15,11 +15,12 @@ class DM(RFCOMM):
         return 'DM'
     
     @classmethod
-    def gen(cls, transition=False):
+    def gen(cls,channel=0, transition=False, length=0, dir=0):
         ret = DM()
         ret.addr = 0b00000001
-        ret.addr |= random.randint(0,1) << 1 # C/R
-        ret.addr |= random.randint(0,1) << 2 # Direction
+        ret.addr |= 0 << 1 # C/R
+        ret.addr |= dir << 2 # Direction
+        ret.addr |= channel << 3
         ret.control = RFCOMM_CONTROL.RC_CONTROL_DM
         ret.length = 0
         return bytes(ret)

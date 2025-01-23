@@ -37,6 +37,9 @@ class MSC:
         ])
         return ret
     
+    def name():
+        return 'MSC'
+
     @classmethod
     def gen(cls, transition=False, channel=0, dir=0):
         ret = MSC()

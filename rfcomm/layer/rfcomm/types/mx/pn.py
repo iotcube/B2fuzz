@@ -32,6 +32,9 @@ class PN:
         ret += bytes([self.K]) # err recovery mode
         return ret
 
+    def name():
+        return 'PN'
+
     @classmethod
     def gen(cls, transition=False, channel=0, dir=0):
         ret = PN()

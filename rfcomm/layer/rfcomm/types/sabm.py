@@ -15,7 +15,7 @@ class SABM(RFCOMM):
         return 'SABM'
     
     @classmethod
-    def gen(cls, channel=0,transition=False):
+    def gen(cls,channel=0, transition=False, length=0, dir=0):
         ret = SABM()
         if transition:
             ret.addr = 0b00000001
@@ -30,6 +30,6 @@ class SABM(RFCOMM):
         ret.addr |= 1 << 1 # C/R
         ret.addr |= 0 << 2 # Direction
         ret.control = RFCOMM_CONTROL.RC_CONTROL_SABM
-        ret.addr |= channel << 3 # channel
+        ret.addr |= random.randint(0, 31) << 3 # channel
         ret.length = 0
         return bytes(ret)

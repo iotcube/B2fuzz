@@ -16,6 +16,9 @@ class INVALID:
         ret += bytes([1])
         return ret
     
+    def name():
+        return 'INVALID'
+
     @classmethod
     def gen(cls, transition=False, channel=0, dir=0):
         ret = INVALID()
