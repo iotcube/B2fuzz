@@ -38,7 +38,6 @@ def main():
     #test_info["starting_time"] = start_time
     #
     #fuzzing(target_addr, target_profile, target_profile_port, adaptive_state_frame, test_info)
-    c = 0
     
     #for _ in range(10):
     #    if open_channel(target_profile_port, target_addr):

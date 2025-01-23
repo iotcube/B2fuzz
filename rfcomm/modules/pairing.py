@@ -62,7 +62,7 @@ def opened_ctrl_ch(target_addr):
 """
 return (sock, is_master)
 """
-def msc_state(target_addr, channel):
+def closed_normal_ch(target_addr, channel):
     # enable ctrl channel
     sock = opened_ctrl_ch(target_addr)
     sock.send(UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel, transition=True, mx_type=PN))
@@ -103,8 +103,8 @@ def establish_dlci(sock, channel):
 
     return sock 
 
-def open_ch_n(target_addr, channel):
-    sock= msc_state(target_addr, channel)
+def open_normal_ch_with_msc(target_addr, channel):
+    sock= closed_normal_ch(target_addr, channel)
     sock = establish_dlci(sock, channel)
     if sock:
         return new_chan_msc(sock, channel, 0)
@@ -112,7 +112,7 @@ def open_ch_n(target_addr, channel):
         return False, False
 
 def open_new_chan(target_addr, channel):
-    sock, _ = open_ch_n(target_addr, channel)
+    sock, _ = open_normal_ch_with_msc(target_addr, channel)
     is_new_chan = False
     try:
         while True:
