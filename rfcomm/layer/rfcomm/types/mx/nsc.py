@@ -18,7 +18,7 @@ class NSC:
         return ret
     
     @classmethod
-    def gen(cls):
+    def gen(cls, transition=False, channel=0, dir=0):
         ret = NSC()
         ret.cmd_type = random.randint(0, 255)
         return bytes(ret)
