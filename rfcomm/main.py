@@ -72,11 +72,5 @@ def main():
     sm = construct_sm(target_addr, target_profile_port)
     expand_sm(sm, target_profile_port, target_addr)
     
-    sock = opened_ctrl_ch(target_addr)
-    print("[-] test")
-    if sock:
-        sock.send(UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=target_profile_port, transition=True, mx_type=PN))
-        recved = sock.recv(MTU)
-        print(recved)
 if __name__ == '__main__':
     main()
