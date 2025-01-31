@@ -5,6 +5,8 @@ import copy
 import os
 from transitions.extensions import GraphMachine
 
+VISUALIZE = 0
+
 class Visualize:
     def __init__(self) -> None:
         self.m = GraphMachine(model=self, graph_engine="pygraphviz", 
@@ -17,6 +19,13 @@ class Visualize:
 
     def add_tr(self, src, dst, frame):
         self.m.add_transition(frame, src, dst)
+
+class SMTraverseError(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+    
+    def __str__(self):
+        return self.msg
 
 vis = Visualize()
 
@@ -117,7 +126,10 @@ def construct_sm(target_addr, channel):
     except:
         pass
     pprint(print_sm(ret))
-    vis.get_graph().draw("base_sm.png", prog='dot')
+
+    if VISUALIZE:
+        vis.get_graph().draw("base_sm.png", prog='dot')
+    
     return ret
 
 
@@ -176,16 +188,22 @@ def expand_sm(sm, initial_channel, target_addr):
                     if state == CLOSED:
                         for frame in RFCOMM_FRAME + RFCOMM_CMD:
                             sock = closed(target_addr)
-                            if sock and send_frame(sock, frame, ch,state,CTRL_CHANNEL, sm, ret, closed):
+                            if sock:
+                                send_frame(sock, frame, ch,state,CTRL_CHANNEL, sm, ret, closed)
                                 sock.close()
+                            else:
+                                raise SMTraverseError(f"cannot traverse {state2str(state)}")
                         print("[*] CLOSED done")
 
 
                     elif state == OPENED_CTRL_CH:
                         for frame in RFCOMM_CMD:
                             sock = opened_ctrl_ch(target_addr)
-                            if sock and send_frame(sock, frame, ch, state,CTRL_CHANNEL, sm, ret, opened_ctrl_ch):
+                            if sock:
+                                send_frame(sock, frame, ch, state,CTRL_CHANNEL, sm, ret, opened_ctrl_ch)
                                 sock.close()
+                            else:
+                                raise SMTraverseError(f"cannot traverse {state2str(state)}")
                         print("[*] OPENED_CTRL_CH done")
 
 
@@ -194,55 +212,86 @@ def expand_sm(sm, initial_channel, target_addr):
                     if state == CLOSED_NORMAL_CH:
                         for frame in RFCOMM_FRAME + RFCOMM_CMD:
                             sock = closed_normal_ch(target_addr, initial_channel)
-                            if sock and send_frame(sock, frame, ch, state, initial_channel, sm, ret, closed_normal_ch):
+                            if sock:
+                                send_frame(sock, frame, ch, state, initial_channel, sm, ret, closed_normal_ch)
                                 sock.close()
+                            else:
+                                raise SMTraverseError(f"cannot traverse {state2str(state)}")
                         print("[*] CLOSED_NORMAL_CH done")
 
                     elif state == OPENED_NORMAL_CH:
                         for frame in RFCOMM_CMD:
                             sock = open_normal_ch(target_addr, initial_channel)
-                            if sock and send_frame(sock, frame, ch, state, initial_channel, sm, ret, open_normal_ch):
+                            if sock:
+                                send_frame(sock, frame, ch, state, initial_channel, sm, ret, open_normal_ch)
                                 sock.close()
+                            else:
+                                raise SMTraverseError(f"cannot traverse {state2str(state)}")
                         print("[*] OPENED_NORMAL_CH done")
 
 
                     elif state == OPENED_NORMAL_CH_WITH_MSC:
                         for frame in RFCOMM_FRAME + RFCOMM_CMD:
                             sock, _ = open_normal_ch_with_msc(target_addr, initial_channel)
-                            if sock and send_frame(sock, frame, ch, state, initial_channel, sm, ret, open_normal_ch_with_msc):
+                            if sock:
+                                send_frame(sock, frame, ch, state, initial_channel, sm, ret, open_normal_ch_with_msc)
                                 sock.close()
+                            else:
+                                raise SMTraverseError(f"cannot traverse {state2str(state)}")
                         print("[*] OPENED_NORMAL_CH_WITH_MSC done")
             else:
                 for state in sm[ch]:
                     if state == CLOSED_NORMAL_CH:
                         for frame in RFCOMM_FRAME + RFCOMM_CMD:
-                            sock = open_new_chan(target_addr, initial_channel)
-                            if sock and send_frame(sock, frame, ch, state, ch, sm, ret, open_new_chan):
+                            sock, _  = open_new_chan(target_addr, initial_channel)
+                            if sock:
+                                send_frame(sock, frame, ch, state, ch, sm, ret, open_new_chan)
                                 sock.close()
+                            else:
+                                raise SMTraverseError(f"cannot traverse {state2str(state)}")
                         print("[*] CLOSED_NORMAL_CH done")
                     elif state == OPENED_NORMAL_CH:
                         for frame in RFCOMM_FRAME + RFCOMM_CMD:
                             sock , new_dlci= open_new_chan(target_addr, initial_channel)
                             if sock:
                                 sock = establish_dlci(sock, new_dlci)
-                            if sock and send_frame(sock, frame, ch, state, ch, sm, ret, open_new_chan):
+                            else:
+                                raise SMTraverseError(f"cannot traverse {state2str(state)}")
+                            if sock:
+                                send_frame(sock, frame, ch, state, ch, sm, ret, open_new_chan)
                                 sock.close()
+                            else:
+                                raise SMTraverseError(f"cannot traverse {state2str(state)}")
                         print("[*] OPENED_NORMAL_CH done")
                     elif state == OPENED_NORMAL_CH_WITH_MSC:
                         for frame in RFCOMM_FRAME + RFCOMM_CMD:
                             sock , new_dlci= open_new_chan(target_addr, initial_channel)
                             if sock:
                                 sock = establish_dlci(sock, new_dlci)
+                            else:
+                                raise SMTraverseError(f"cannot traverse {state2str(state)}")
                             if sock:
                                 sock, msc = new_chan_msc(sock, new_dlci>>1, new_dlci&0b1)
-                            if sock and send_frame(sock, frame, ch, state, ch, sm, ret, open_new_chan):
+                            else:
+                                raise SMTraverseError(f"cannot traverse {state2str(state)}")
+                            if sock:
+                                send_frame(sock, frame, ch, state, ch, sm, ret, open_new_chan)
                                 sock.close()
+                            else:
+                                raise SMTraverseError(f"cannot traverse {state2str(state)}")
                         print("[*] OPENED_NORMAL_CH_WITH_MSC done")
-    except:
+    except Exception as e:
+        print("[*] crash detected while expanding State Machine")
+        print(f"[*] {e}")
         pprint(print_sm(ret))
         print(hidden_state_path)
-        vis.get_graph().draw("expanded_sm.png", prog='dot')
+        
+        if VISUALIZE:
+            vis.get_graph().draw("expanded_sm.png", prog='dot')
+        
         return False
     pprint(print_sm(ret))
     print(hidden_state_path)
-    vis.get_graph().draw("expanded_sm.png", prog='dot')
+    if VISUALIZE:
+        vis.get_graph().draw("expanded_sm.png", prog='dot')
+    return ret

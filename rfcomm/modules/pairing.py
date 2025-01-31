@@ -110,8 +110,8 @@ def open_normal_ch(target_addr, channel):
 
 def open_normal_ch_with_msc(target_addr, channel):
     sock= closed_normal_ch(target_addr, channel)
-    sock = establish_dlci(sock, channel)
     if sock:
+        sock = establish_dlci(sock, channel)
         return new_chan_msc(sock, channel, 0)
     else:
         return False, False
