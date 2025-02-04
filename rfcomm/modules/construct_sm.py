@@ -7,6 +7,8 @@ from transitions.extensions import GraphMachine
 
 VISUALIZE = 0
 
+tmp_pkt = None
+
 class Visualize:
     def __init__(self) -> None:
         self.m = GraphMachine(model=self, graph_engine="pygraphviz", 
@@ -155,10 +157,26 @@ def recv_pkt(sock):
 def send_frame(sock, frame, ch, state, channel_to_ctrl, base_sm, ret_sm, path):
     global new_state
     global hidden_state_path
+    global tmp_pkt
+    global crash_cnt
+    global pkt_cnt
+    pkt_info = ""
+    pkt_cnt += 1
+
     if frame not in RFCOMM_CMD:
-        sock.send(frame.gen())
+        tmp_pkt = frame.gen()
+        sock.send(tmp_pkt)
     else:
-        sock.send(UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel_to_ctrl, transition=True, mx_type=frame))
+        tmp_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel_to_ctrl, transition=True, mx_type=frame)
+        sock.send(tmp_pkt)
+    pkt_info = {}
+    pkt_info['no'] = pkt_cnt
+    pkt_info['protocol'] = 'RFCOMM'
+    pkt_info['sended_time'] = str(datetime.now())
+    pkt_info['payload'] = parse_pkt(tmp_pkt)
+    pkt_info['crash'] = 'n'
+    pkt_info['state'] = state2str(state)
+    logger.inputQueue(pkt_info)
     try:
         rsp_type, conn_rsp = recv_pkt(sock)
         # not NSC
@@ -179,6 +197,7 @@ def send_frame(sock, frame, ch, state, channel_to_ctrl, base_sm, ret_sm, path):
 
 
 def expand_sm(sm, initial_channel, target_addr):
+    logger.inputQueue("******************Fuzzing stage 1***********************")
     ret = copy.deepcopy(sm)
     global new_state
     try:
@@ -285,13 +304,19 @@ def expand_sm(sm, initial_channel, target_addr):
         print(f"[*] {e}")
         pprint(print_sm(ret))
         print(hidden_state_path)
-        
+        logger.inputQueue("crashed at : ")
+        logger.inputQueue(parse_pkt(tmp_pkt))
+        logger.logUpdate()
         if VISUALIZE:
             vis.get_graph().draw("expanded_sm.png", prog='dot')
         
         return False
     pprint(print_sm(ret))
     print(hidden_state_path)
+    
+    logger.inputQueue("*******************Stage 1 complete****************************")
+    logger.logUpdate()
+    
     if VISUALIZE:
         vis.get_graph().draw("expanded_sm.png", prog='dot')
     return ret
