@@ -1,5 +1,6 @@
-from modules import *
+#from modules import *
 from .pairing import *
+from .mutation_new import *
 from collections import defaultdict
 import copy
 import os
@@ -197,6 +198,7 @@ def send_frame(sock, frame, ch, state, channel_to_ctrl, base_sm, ret_sm, path):
 
 
 def expand_sm(sm, initial_channel, target_addr):
+    global logger
     logger.inputQueue("******************Fuzzing stage 1***********************")
     ret = copy.deepcopy(sm)
     global new_state
