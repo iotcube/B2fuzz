@@ -39,36 +39,7 @@ def main():
     #
     #fuzzing(target_addr, target_profile, target_profile_port, adaptive_state_frame, test_info)
     
-    #for _ in range(10):
-    #    if open_channel(target_profile_port, target_addr):
-    #        c += 1
-    #print(f"crash: {c} / attempt: 10")
-    #open_channel(target_profile_port, target_addr)
-    
-    #open_rfcomm_channel(target_profile_port, target_addr)
-    #sock= open_ch_n(target_addr, target_profile_port)
-    #sock, new_dlci = open_new_chan(target_addr, target_profile_port)
-    #if sock:
-    #    sock = new_chan_msc(sock, new_dlci>>1, new_dlci&0b1)
-    #if sock:
-    #    if not new_chan:
-    #        print("[-] send pkt")
-    #        sock.send(bytes(DATA.gen(channel=target_profile_port, length=120)))
-    #        try:
-    #            res = sock.recv(MTU)
-    #        except:
-    #            print("[-] no res")
-    #            return False
-    #        print(f"[-] response: {res}")
-    #    else:
-    #        print("[-] send pkt")
-    #        sock.send(bytes(DATA.gen(channel=new_chan, length=120, dir=dir)))
-    #        try:
-    #            res = sock.recv(MTU)
-    #        except:
-    #            print("[-] no res")
-    #            return False
-    #        print(f"[-] response: {res}")
+   
     sm = construct_sm(target_addr, target_profile_port)
     exp_sm = expand_sm(sm, target_profile_port, target_addr)
     if exp_sm:

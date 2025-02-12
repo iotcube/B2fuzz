@@ -54,7 +54,7 @@ def parse_pkt(pkt):
     payload['fcs'] = hex(pkt[-1])
     return payload
 
-def fuz_send_pkt(bt_addr, sock, pkt, state):
+def fuz_send_pkt(bt_addr, sock, pkt, state, channel_to_ctrl=0):
     """
     Errno
         ConnectionResetError: [Errno 104] Connection reset by peer
@@ -64,6 +64,7 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
     """
     global crash_cnt
     global pkt_cnt
+    global tmp_pkt
     pkt_info = ""
     pkt_cnt += 1
     is_crashed = False
@@ -72,7 +73,7 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
             tmp_pkt = pkt.gen()
             sock.send(tmp_pkt)
         else:
-            tmp_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=0, transition=True, mx_type=pkt)
+            tmp_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel_to_ctrl, transition=False, mx_type=pkt)
             sock.send(tmp_pkt)
         pkt_info = {}
         pkt_info['no'] = pkt_cnt
@@ -85,7 +86,7 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
     except ConnectionResetError:
         print("[-] Crash Found - ConnectionResetError detected")
         if(l2ping(bt_addr) == False):
-            print("Crash Packet :", pkt)
+            print("Crash Packet :", tmp_pkt)
             crash_cnt += 1
             logger.Q_crash_cnt += 1
             print("Crash packet count : ", crash_cnt)
@@ -93,7 +94,7 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
             pkt_info["no"] = pkt_cnt
             pkt_info["protocol"] = "RFCOMM"
             pkt_info["sended_time"] = str(datetime.now())
-            pkt_info["payload"] = parse_pkt(pkt)
+            pkt_info["payload"] = parse_pkt(tmp_pkt)
             pkt_info["state"] = state2str(state)
             pkt_info["sended?"] = "n"			
             pkt_info["crash"] = "y"
@@ -102,7 +103,7 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
 
     except bluetooth.BluetoothError as e:
         print(f"[-] Crash Found - {e} detected")
-        print("Crash Packet :", pkt)
+        print("Crash Packet :", tmp_pkt)
         crash_cnt += 1
 
         logger.Q_crash_cnt += 1
@@ -111,7 +112,7 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
         pkt_info["no"] = pkt_cnt
         pkt_info["protocol"] = "RFCOMM"
         pkt_info["sended_time"] = str(datetime.now())
-        pkt_info["payload"] = parse_pkt(pkt)
+        pkt_info["payload"] = parse_pkt(tmp_pkt)
         pkt_info["state"] = state2str(state)
         pkt_info["sended?"] = "n"			
         pkt_info["crash"] = "y"
@@ -127,83 +128,112 @@ def fuz_send_pkt(bt_addr, sock, pkt, state):
 
 def closed_state_fuzzing(target_addr, state_frame):
     print("[-] current state: closed")
+    global tmp_pkt
+    global crash_cnt
     for _ in range(MUTATION_CNT): 
         sock = closed(target_addr)
-        is_crashed = fuz_send_pkt(target_addr, sock, random.choice(state_frame[CTRL_CHANNEL][CLOSED]), CLOSED)
-        sock.close()
+        if sock:
+            is_crashed = fuz_send_pkt(target_addr, sock, random.choice(state_frame[CTRL_CHANNEL][CLOSED]), CLOSED)
+            sock.close()
+        else:
+            print(f"[-] Crash Found - State violation detected")
+            print("Crash Packet :", tmp_pkt)
+            crash_cnt += 1
+
+            logger.Q_crash_cnt += 1
+            print("Crash packet count : ", crash_cnt)
+            pkt_info = {}
+            pkt_info["no"] = pkt_cnt
+            pkt_info["protocol"] = "RFCOMM"
+            pkt_info["sended_time"] = str(datetime.now())
+            pkt_info["payload"] = parse_pkt(tmp_pkt)
+            pkt_info["state"] = state2str(state)
+            pkt_info["sended?"] = "n"			
+            pkt_info["crash"] = "y"
+            pkt_info["crash_info"] = "TimeoutError"
+            is_crashed = True
+            if(pkt_info == ""): pass
+            else: logger.inputQueue(pkt_info)
     time.sleep(0.1)
     return is_crashed
 
-#def term_wait_sec_check_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
-#    print("[-] current state: t_w_sec_check")
-#    for _ in range(MUTATION_CNT):
-#        sock = term_wait_sec(target_addr) 
-#        is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_TERM_WAIT_SEC_CHECK_STATE]).gen()), RFCOMM_TERM_WAIT_SEC_CHECK_STATE)
-#        sock.close()
-#    time.sleep(0.1)
-#    return is_crashed
-#
-#def opened_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
-#    print("[-] current state: opened")
-#    for _ in range(MUTATION_CNT): 
-#        sock = opened_state(target_addr)
-#        is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_OPENED_STATE]).gen()), RFCOMM_OPENED_STATE,)
-#        sock.close()
-#    time.sleep(0.1)
-#    return is_crashed
-#
-#def disc_wait_ua_state_fuzzing(target_addr, state_frame=NORMAL_STATE_FRAME):
-#    print("[-] current state: disc_w_ua")
-#    for _ in range(MUTATION_CNT): 
-#        sock = disc_wait_ua(target_addr)
-#        is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[RFCOMM_DISC_WAIT_UA_STATE]).gen()), RFCOMM_DISC_WAIT_UA_STATE)
-#        sock.close()
-#    time.sleep(0.1)
-#    return is_crashed
-#
-#def hidden_state_fuzzing(target_addr, state, state_frame=NORMAL_STATE_FRAME):
-#    print("[-] current state: "+state2str(state))
-#    for _ in range(MUTATION_CNT): 
-#        sock = hidden(target_addr, state)
-#        is_crashed = fuz_send_pkt(target_addr, sock, bytes(random.choice(state_frame[state]).gen()), state)
-#        sock.close()
-#    time.sleep(0.1)
-#    return is_crashed
-#
-#
-def mutation_in_normal_state(target_addr, sm):
-    print("[-] normal mutation")
-    if CLOSED in sm[CTRL_CHANNEL]:
-        is_crashed = closed_state_fuzzing(target_addr, sm)
-        if is_crashed: return True
-    #Sis_crashed = term_wait_sec_check_state_fuzzing(target_addr)
-    #Sif is_crashed: return True
-    #Sis_crashed = opened_state_fuzzing(target_addr)
-    #Sif is_crashed: return True
-    #Sis_crashed = disc_wait_ua_state_fuzzing(target_addr) 
-    #Sif is_crashed: return True
+def open_ctrl_ch_state_fuzzing(target_addr, state_frame):
+    print("[-] current state: open_ctrl_ch")
+    for _ in range(MUTATION_CNT): 
+        sock = opened_ctrl_ch(target_addr)
+        if sock:
+            is_crashed = fuz_send_pkt(target_addr, sock, random.choice(state_frame[CTRL_CHANNEL][OPENED_CTRL_CH]), OPENED_CTRL_CH)
+            sock.close()
+        else:
+            print(f"[-] Crash Found - State violation detected")
+            print("Crash Packet :", tmp_pkt)
+            crash_cnt += 1
 
-#def mutation_in_adaptive_state(target_addr, adaptive_state_frame):
-#    print("[-] adaptive mutation")
-#    if len(adaptive_state_frame[RFCOMM_CLOSED_STATE]) != 0:
-#        is_crashed = closed_state_fuzzing(target_addr, state_frame=adaptive_state_frame)
-#        if is_crashed: return True
-#    if len(adaptive_state_frame[RFCOMM_TERM_WAIT_SEC_CHECK_STATE]) != 0:
-#        is_crashed = term_wait_sec_check_state_fuzzing(target_addr, state_frame=adaptive_state_frame)
-#        if is_crashed: return True
-#    if len(adaptive_state_frame[RFCOMM_OPENED_STATE]) != 0:
-#        is_crashed = opened_state_fuzzing(target_addr, state_frame=adaptive_state_frame)
-#        if is_crashed: return True
-#    if len(adaptive_state_frame[RFCOMM_DISC_WAIT_UA_STATE]) != 0:
-#        is_crashed = disc_wait_ua_state_fuzzing(target_addr, state_frame=adaptive_state_frame)
-#        if is_crashed: return True
-#    #print(adaptive_state_frame)
-#    # hidden state fuzzing
-#    for state in adaptive_state_frame:
-#        if state > 0x6:
-#            if len(adaptive_state_frame[state]) != 0:
-#                is_crashed = hidden_state_fuzzing(target_addr,state, state_frame=adaptive_state_frame)
-#                if is_crashed: return True
+            logger.Q_crash_cnt += 1
+            print("Crash packet count : ", crash_cnt)
+            pkt_info = {}
+            pkt_info["no"] = pkt_cnt
+            pkt_info["protocol"] = "RFCOMM"
+            pkt_info["sended_time"] = str(datetime.now())
+            pkt_info["payload"] = parse_pkt(tmp_pkt)
+            pkt_info["state"] = state2str(state)
+            pkt_info["sended?"] = "n"			
+            pkt_info["crash"] = "y"
+            pkt_info["crash_info"] = "TimeoutError"
+            is_crashed = True
+            if(pkt_info == ""): pass
+            else: logger.inputQueue(pkt_info)
+    time.sleep(0.1)
+    return is_crashed
+
+def closed_normal_ch_state_fuzzing(target_addr, state_frame, ch):
+    print("[-] current state: open_ctrl_ch")
+    for _ in range(MUTATION_CNT): 
+        sock = closed_normal_ch(target_addr, ch)
+        if sock:
+            is_crashed = fuz_send_pkt(target_addr, sock, random.choice(state_frame[ch][CLOSED_NORMAL_CH]), CLOSED_NORMAL_CH, channel_to_ctrl=ch)
+            sock.close()
+        else:
+            print(f"[-] Crash Found - State violation detected")
+            print("Crash Packet :", tmp_pkt)
+            crash_cnt += 1
+
+            logger.Q_crash_cnt += 1
+            print("Crash packet count : ", crash_cnt)
+            pkt_info = {}
+            pkt_info["no"] = pkt_cnt
+            pkt_info["protocol"] = "RFCOMM"
+            pkt_info["sended_time"] = str(datetime.now())
+            pkt_info["payload"] = parse_pkt(tmp_pkt)
+            pkt_info["state"] = state2str(state)
+            pkt_info["sended?"] = "n"			
+            pkt_info["crash"] = "y"
+            pkt_info["crash_info"] = "TimeoutError"
+            is_crashed = True
+            if(pkt_info == ""): pass
+            else: logger.inputQueue(pkt_info)
+    time.sleep(0.1)
+    return is_crashed
+
+
+
+def mutation_in_normal_state(target_addr, sm):
+    for channel in sm:
+        for state in sm[channel]:
+            if state == CLOSED:
+                is_crashed = closed_state_fuzzing(target_addr, sm)
+                if is_crashed: return True
+            elif state == OPENED_CTRL_CH:
+                is_crashed = open_ctrl_ch_state_fuzzing(target_addr, sm)
+                if is_crashed: return True
+            elif state == CLOSED_NORMAL_CH:
+                is_crashed = closed_normal_ch_state_fuzzing(target_addr, sm, channel)
+                if is_crashed: return True
+            else:
+                pass
+
+
+
 
 def logsave(loggerDict):
     loggerDict["end_time"] = str(datetime.now())

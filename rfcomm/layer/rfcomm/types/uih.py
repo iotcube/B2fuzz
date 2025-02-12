@@ -62,6 +62,6 @@ class UIH(RFCOMM):
         if mx_type is None:
             ret.data = random.choice(MX_TYPE).gen()
         else:
-            ret.data = mx_type.gen()
+            ret.data = mx_type.gen(channel=channel_to_ctrl)
         ret.length = len(ret.data)
         return bytes(ret)
