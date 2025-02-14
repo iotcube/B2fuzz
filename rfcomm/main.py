@@ -39,10 +39,10 @@ def main():
     #
     #fuzzing(target_addr, target_profile, target_profile_port, adaptive_state_frame, test_info)
     
-   
     sm = construct_sm(target_addr, target_profile_port)
-    exp_sm = expand_sm(sm, target_profile_port, target_addr)
+    exp_sm , path = expand_sm(sm, target_profile_port, target_addr)
+    test_info["state machine"] = print_sm(exp_sm)
     if exp_sm:
-        fuzzing(target_addr, target_profile, target_profile_port, exp_sm, test_info)
+        fuzzing(target_addr, target_profile, target_profile_port, exp_sm, test_info, path)
 if __name__ == '__main__':
     main()

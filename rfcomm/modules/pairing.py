@@ -1,6 +1,6 @@
 from datetime import datetime
 from pprint import pprint
-from modules import *
+#from modules import *
 from lib import *
 from time import sleep
 from layer.rfcomm.const import RFCOMM_PSM
@@ -37,13 +37,19 @@ RFCOMM_FRAME = [DM, DISC, SABM, UA, UIH, DATA]
 RFCOMM_CMD = [FCON, FCOFF, INVALID, MSC, NSC, PN, RLS, RPN, TEST]
 new_state = 5
 
-def closed(target_addr):
+def closed(target_addr, ch=0):
     sock = bluetooth.BluetoothSocket(bluetooth.L2CAP)
-    sock.connect((target_addr, RFCOMM_PSM))
+    try:
+        sock.connect((target_addr, RFCOMM_PSM))
+    except Exception as e:
+        print(e)
+        return False
     return sock
 
-def opened_ctrl_ch(target_addr):
+def opened_ctrl_ch(target_addr, ch=0):
     sock = closed(target_addr)
+    if not sock:
+        return False
     sock.send(SABM.gen(channel=CTRL_CHANNEL, transition=True))
     conn_rsp, sock = inter_recv(sock)
     if conn_rsp == None:
@@ -64,6 +70,8 @@ return (sock, is_master)
 def closed_normal_ch(target_addr, channel):
     # enable ctrl channel
     sock = opened_ctrl_ch(target_addr)
+    if not sock:
+         return False
     sock.send(UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel, transition=True, mx_type=PN))
     try:
         while True:

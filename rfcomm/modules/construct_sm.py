@@ -186,7 +186,7 @@ def send_frame(sock, frame, ch, state, channel_to_ctrl, base_sm, ret_sm, path):
             (frame not in base_sm[ch][state]):
             ret_sm[ch][state].append(frame)
             ret_sm[ch][new_state] = []
-            hidden_state_path.append([(path, frame)])
+            hidden_state_path.append((path, frame))
             vis.add_state(state2str(new_state))
             vis.add_tr(state2str(state),state2str(new_state), frame2str(frame))
             new_state += 1
@@ -202,6 +202,7 @@ def expand_sm(sm, initial_channel, target_addr):
     logger.inputQueue("******************Fuzzing stage 1***********************")
     ret = copy.deepcopy(sm)
     global new_state
+    global hidden_state_path
     try:
         for ch in sm:
             if ch == CTRL_CHANNEL:
@@ -279,7 +280,7 @@ def expand_sm(sm, initial_channel, target_addr):
                             else:
                                 raise SMTraverseError(f"cannot traverse {state2str(state)}")
                             if sock:
-                                send_frame(sock, frame, ch, state, ch, sm, ret, open_new_chan)
+                                send_frame(sock, frame, ch, state, ch, sm, ret, establish_new_dlci)
                                 sock.close()
                             else:
                                 raise SMTraverseError(f"cannot traverse {state2str(state)}")
@@ -296,7 +297,7 @@ def expand_sm(sm, initial_channel, target_addr):
                             else:
                                 raise SMTraverseError(f"cannot traverse {state2str(state)}")
                             if sock:
-                                send_frame(sock, frame, ch, state, ch, sm, ret, open_new_chan)
+                                send_frame(sock, frame, ch, state, ch, sm, ret, new_chan_msc)
                                 sock.close()
                             else:
                                 raise SMTraverseError(f"cannot traverse {state2str(state)}")
@@ -321,4 +322,4 @@ def expand_sm(sm, initial_channel, target_addr):
     
     if VISUALIZE:
         vis.get_graph().draw("expanded_sm.png", prog='dot')
-    return ret
+    return ret, hidden_state_path
