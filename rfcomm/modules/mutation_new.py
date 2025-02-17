@@ -54,7 +54,7 @@ def parse_pkt(pkt):
     payload['fcs'] = hex(pkt[-1])
     return payload
 
-def fuz_send_pkt(bt_addr, sock, pkt, state, channel_to_ctrl=0):
+def fuz_send_pkt(bt_addr, sock, pkt, state,path=None, channel_to_ctrl=0):
     """
     Errno
         ConnectionResetError: [Errno 104] Connection reset by peer
@@ -79,9 +79,9 @@ def fuz_send_pkt(bt_addr, sock, pkt, state, channel_to_ctrl=0):
         pkt_info['no'] = pkt_cnt
         pkt_info['protocol'] = 'RFCOMM'
         pkt_info['sended_time'] = str(datetime.now())
-        pkt_info['payload'] = parse_pkt(tmp_pkt)
+        pkt_info['payload'] = tmp_pkt
         pkt_info['crash'] = 'n'
-        pkt_info['state'] = state2str(state)
+        pkt_info['state'] = {"name": state2str(state), "src": (str(path[state - 5][0]).split())[1], "tr": str(path[state - 5][1])} if path else state2str(state)
 
     except ConnectionResetError:
         print("[-] Crash Found - ConnectionResetError detected")
@@ -94,8 +94,8 @@ def fuz_send_pkt(bt_addr, sock, pkt, state, channel_to_ctrl=0):
             pkt_info["no"] = pkt_cnt
             pkt_info["protocol"] = "RFCOMM"
             pkt_info["sended_time"] = str(datetime.now())
-            pkt_info["payload"] = parse_pkt(tmp_pkt)
-            pkt_info["state"] = state2str(state)
+            pkt_info["payload"] = tmp_pkt
+            pkt_info["state"] = {"name": state2str(state), "src": (str(path[state - 5][0]).split())[1], "tr": str(path[state - 5][1])} if path else state2str(state)
             pkt_info["sended?"] = "n"			
             pkt_info["crash"] = "y"
             pkt_info["crash_info"] = "ConnectionResetError"
@@ -112,8 +112,8 @@ def fuz_send_pkt(bt_addr, sock, pkt, state, channel_to_ctrl=0):
         pkt_info["no"] = pkt_cnt
         pkt_info["protocol"] = "RFCOMM"
         pkt_info["sended_time"] = str(datetime.now())
-        pkt_info["payload"] = parse_pkt(tmp_pkt)
-        pkt_info["state"] = state2str(state)
+        pkt_info["payload"] = tmp_pkt
+        pkt_info["state"] = {"name": state2str(state), "src": (str(path[state - 5][0]).split())[1], "tr": str(path[state - 5][1])} if path else state2str(state)
         pkt_info["sended?"] = "n"			
         pkt_info["crash"] = "y"
         pkt_info["crash_info"] = f"{e}"
@@ -146,8 +146,8 @@ def closed_state_fuzzing(target_addr, state_frame, ch=0):
             pkt_info["no"] = pkt_cnt
             pkt_info["protocol"] = "RFCOMM"
             pkt_info["sended_time"] = str(datetime.now())
-            pkt_info["payload"] = parse_pkt(tmp_pkt)
-            pkt_info["state"] = state2str(state)
+            pkt_info["payload"] = tmp_pkt
+            pkt_info["state"] = "closed_state"
             pkt_info["sended?"] = "n"			
             pkt_info["crash"] = "y"
             pkt_info["crash_info"] = "State violation"
@@ -176,8 +176,8 @@ def open_ctrl_ch_state_fuzzing(target_addr, state_frame, ch=0):
             pkt_info["no"] = pkt_cnt
             pkt_info["protocol"] = "RFCOMM"
             pkt_info["sended_time"] = str(datetime.now())
-            pkt_info["payload"] = parse_pkt(tmp_pkt)
-            pkt_info["state"] = state2str(state)
+            pkt_info["payload"] = tmp_pkt
+            pkt_info["state"] = "opened_ctrl_channel_state"
             pkt_info["sended?"] = "n"			
             pkt_info["crash"] = "y"
             pkt_info["crash_info"] = "State violation"
@@ -208,8 +208,8 @@ def closed_normal_ch_state_fuzzing(target_addr, state_frame, ch):
             pkt_info["no"] = pkt_cnt
             pkt_info["protocol"] = "RFCOMM"
             pkt_info["sended_time"] = str(datetime.now())
-            pkt_info["payload"] = parse_pkt(tmp_pkt)
-            pkt_info["state"] = state2str(state)
+            pkt_info["payload"] = tmp_pkt
+            pkt_info["state"] = "closed normal ch"
             pkt_info["sended?"] = "n"			
             pkt_info["crash"] = "y"
             pkt_info["crash_info"] = "State violation"
@@ -241,8 +241,8 @@ def opened_normal_ch_state_fuzzing(target_addr, state_frame, ch):
             pkt_info["no"] = pkt_cnt
             pkt_info["protocol"] = "RFCOMM"
             pkt_info["sended_time"] = str(datetime.now())
-            pkt_info["payload"] = parse_pkt(tmp_pkt)
-            pkt_info["state"] = state2str(state)
+            pkt_info["payload"] = tmp_pkt
+            pkt_info["state"] = "opened_normal_channel_state"
             pkt_info["sended?"] = "n"			
             pkt_info["crash"] = "y"
             pkt_info["crash_info"] = "State violation"
@@ -274,8 +274,8 @@ def opened_normal_ch_with_msc_state_fuzzing(target_addr, state_frame, ch):
             pkt_info["no"] = pkt_cnt
             pkt_info["protocol"] = "RFCOMM"
             pkt_info["sended_time"] = str(datetime.now())
-            pkt_info["payload"] = parse_pkt(tmp_pkt)
-            pkt_info["state"] = state2str(state)
+            pkt_info["payload"] =tmp_pkt
+            pkt_info["state"] = "opened normal channel(after msc)"
             pkt_info["sended?"] = "n"			
             pkt_info["crash"] = "y"
             pkt_info["crash_info"] = "State violation"
@@ -296,11 +296,11 @@ def new_state_fuzzing(target_addr, state_frame, ch, state, path):
         else:
             sock = path[state - 5][0](target_addr, ch)
         if sock:
-            sock.send(path[state - 5][1].gen(channel=ch))
+            sock.send(path[state - 5][1])
         else:
             sock = False
         if sock:
-            is_crashed = fuz_send_pkt(target_addr, sock, random.choice(RFCOMM_CMD + RFCOMM_FRAME), state, channel_to_ctrl=ch)
+            is_crashed = fuz_send_pkt(target_addr, sock, random.choice(RFCOMM_CMD + RFCOMM_FRAME), state, path, channel_to_ctrl=ch)
             sock.close()
         else:
             print(f"[-] Crash Found - State violation detected")
@@ -313,8 +313,8 @@ def new_state_fuzzing(target_addr, state_frame, ch, state, path):
             pkt_info["no"] = pkt_cnt
             pkt_info["protocol"] = "RFCOMM"
             pkt_info["sended_time"] = str(datetime.now())
-            pkt_info["payload"] = parse_pkt(tmp_pkt)
-            pkt_info["state"] = state2str(state)+" "+(str(path[state - 5][0]).split())[1]+" "+str(path[state - 5][1])
+            pkt_info["payload"] = tmp_pkt
+            pkt_info["state"] = {"name": state2str(state), "src": (str(path[state - 5][0]).split())[1], "tr": str(path[state - 5][1])}
             pkt_info["sended?"] = "n"			
             pkt_info["crash"] = "y"
             pkt_info["crash_info"] = "State violation"
@@ -363,8 +363,10 @@ def logsave(loggerDict):
 def fuzzing(target_addr, profile, port, adaptive_state_frame, test_info, path):
     global tmp
     global crash_cnt
+    global logger
     now = datetime.now()
     tmp = 0
+    i=0
     test_info["starting_time"] = str(now)
     logger.init_info(test_info)
     if(profile == "None" or port == "None"):
@@ -380,18 +382,17 @@ def fuzzing(target_addr, profile, port, adaptive_state_frame, test_info, path):
             #is_crashed = False
             is_crashed = mutation_in_normal_state(target_addr, adaptive_state_frame, path)
             if is_crashed:
-                break
+                logger.inputQueue("**ITEREND**")
+                logsave(loggerDict)
+                continue
             #is_crashed = mutation_in_adaptive_state(target_addr, adaptive_state_frame)
             #if is_crashed:
             #    break
             logger.inputQueue("**ITEREND**")
+            i += 1
+            logsave(loggerDict)
             print("********************************************************************")
-            logger.end = time.time()
-            if logger.end - logger.start > 60:
-                logger.start = time.time()
-                t1 = threading.Thread(target=logger.logUpdate())
-                t1.start()
-
+           
             if pkt_cnt > 2000000:
                 print('[*] Save logfile')
                 print('iteration END@@@@@@@@@@')

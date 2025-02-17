@@ -51,8 +51,11 @@ def opened_ctrl_ch(target_addr, ch=0):
     if not sock:
         return False
     sock.send(SABM.gen(channel=CTRL_CHANNEL, transition=True))
-    conn_rsp, sock = inter_recv(sock)
-    if conn_rsp == None:
+    try:
+        conn_rsp, sock = inter_recv(sock)
+    except:
+        return False
+    if conn_rsp == None or conn_rsp == b"":
         print('[*] recv failed.')
         return False
     else:  

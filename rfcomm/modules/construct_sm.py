@@ -174,7 +174,7 @@ def send_frame(sock, frame, ch, state, channel_to_ctrl, base_sm, ret_sm, path):
     pkt_info['no'] = pkt_cnt
     pkt_info['protocol'] = 'RFCOMM'
     pkt_info['sended_time'] = str(datetime.now())
-    pkt_info['payload'] = parse_pkt(tmp_pkt)
+    pkt_info['payload'] = tmp_pkt
     pkt_info['crash'] = 'n'
     pkt_info['state'] = state2str(state)
     logger.inputQueue(pkt_info)
@@ -186,7 +186,7 @@ def send_frame(sock, frame, ch, state, channel_to_ctrl, base_sm, ret_sm, path):
             (frame not in base_sm[ch][state]):
             ret_sm[ch][state].append(frame)
             ret_sm[ch][new_state] = []
-            hidden_state_path.append((path, frame))
+            hidden_state_path.append((path, tmp_pkt))
             vis.add_state(state2str(new_state))
             vis.add_tr(state2str(state),state2str(new_state), frame2str(frame))
             new_state += 1
@@ -308,7 +308,7 @@ def expand_sm(sm, initial_channel, target_addr):
         pprint(print_sm(ret))
         print(hidden_state_path)
         logger.inputQueue("crashed at : ")
-        logger.inputQueue(parse_pkt(tmp_pkt))
+        logger.inputQueue(tmp_pkt)
         logger.logUpdate()
         if VISUALIZE:
             vis.get_graph().draw("expanded_sm.png", prog='dot')
