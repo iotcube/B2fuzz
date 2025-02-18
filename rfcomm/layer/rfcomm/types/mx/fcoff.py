@@ -20,7 +20,7 @@ class FCOFF:
         return 'FCOFF'
 
     @classmethod
-    def gen(cls, transition=False, channel=0, dir=0):
+    def gen(cls, transition=False, fuzz=False, channel=0, dir=0):
         ret = FCOFF()
         ret.type =  MX_TYPE.MX_FCOFF | (1<<1)
         return bytes(ret)

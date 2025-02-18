@@ -19,7 +19,7 @@ class TEST:
         return 'TEST'
 
     @classmethod
-    def gen(cls, transition=False, channel=0, dir=0):
+    def gen(cls, transition=False, fuzz=False, channel=0, dir=0):
         ret = TEST()
         ret.type = MX_TYPE.MX_TEST + (1<<1)
         return bytes(ret)

@@ -165,7 +165,7 @@ def send_frame(sock, frame, ch, state, channel_to_ctrl, base_sm, ret_sm, path):
     pkt_cnt += 1
 
     if frame not in RFCOMM_CMD:
-        tmp_pkt = frame.gen()
+        tmp_pkt = frame.gen(transition=True)
         sock.send(tmp_pkt)
     else:
         tmp_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel_to_ctrl, transition=True, mx_type=frame)

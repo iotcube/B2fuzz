@@ -1,5 +1,5 @@
 import random
-from layer.rfcomm.const import MX_TYPE
+from layer.rfcomm.const import *
 
 length = 2
 
@@ -41,7 +41,7 @@ class MSC:
         return 'MSC'
 
     @classmethod
-    def gen(cls, transition=False, channel=0, dir=0):
+    def gen(cls, transition=False, fuzz= False, channel=0, dir=0):
         ret = MSC()
         if transition:
             ret.DV = 1
@@ -54,6 +54,19 @@ class MSC:
             ret.reserved = 0
             ret.reserved2 = 0
             return bytes(ret)
+        elif fuzz:
+            ret.DV = random.randint(0,1)
+            ret.FC = random.randint(0,1)
+            ret.IC = random.randint(0,1)
+            ret.RTR = random.randint(0,1)
+            ret.RTC = random.randint(0,1)
+            ret.FC = random.randint(0,1)
+            ret.EA = 1
+            ret.reserved =0
+            ret.reserved2 = 0
+            ret.DLCI = gen_param(0b00000011, 1, (0b00000011, 0b11111011))
+            return bytes(ret)
+
         ret.DV = random.randint(0,1)
         ret.FC = random.randint(0,1)
         ret.IC = random.randint(0,1)

@@ -1,5 +1,5 @@
 import random
-from layer.rfcomm.const import MX_TYPE
+from layer.rfcomm.const import *
 
 length = 8
 
@@ -24,7 +24,7 @@ class PN:
         ret += bytes([self.type])
         ret += bytes([8*2+1])
         ret += bytes([self.DLCI])
-        ret += bytes([self.CL << 4 + self.I])
+        ret += bytes([self.CL << 4 | self.I])
         ret += bytes([self.P])
         ret += bytes([self.T])
         ret += (self.N).to_bytes(2, byteorder='little') # 16 bits
@@ -36,7 +36,7 @@ class PN:
         return 'PN'
 
     @classmethod
-    def gen(cls, transition=False, channel=0, dir=0):
+    def gen(cls, transition=False, fuzz=False, channel=0, dir=0):
         ret = PN()
         if transition:
             ret.type = MX_TYPE.MX_PN# + (random.randint(0,1)<<1)
@@ -48,6 +48,17 @@ class PN:
             ret.N = 256
             ret.NA = 0b00000000
             ret.K = 7
+            return bytes(ret)
+        elif fuzz:
+            ret.type = MX_TYPE.MX_PN# + (random.randint(0,1)<<1)
+            ret.DLCI = gen_param(0b00000011, 1, (0b00000011, 0b11111011))
+            ret.CL = random.randint(0, 15)
+            ret.I = random.randint(0, 15)
+            ret.P = gen_param(0b00000000, 1, (0b00000000, 0b11111111))
+            ret.T = gen_param(0b00000000, 1, (0b00000000, 0b11111111))
+            ret.N = gen_param(256, 2, (0x0000, 0xffff))
+            ret.NA = gen_param(0b00000000, 1, (0b00000000, 0b11111111))
+            ret.K = gen_param(0b00000000, 1, (0b00000000, 0b11111111))
             return bytes(ret)
         ret.type = MX_TYPE.MX_PN# + (random.randint(0,1)<<1)
         ret.DLCI = random.randint(0, 31)

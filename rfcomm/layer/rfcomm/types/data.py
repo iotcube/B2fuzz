@@ -1,7 +1,7 @@
 import random
 from layer.rfcomm.types.base import RFCOMM
 from layer.rfcomm.util import calc_fcs
-from layer.rfcomm.const import RFCOMM_CONTROL
+from layer.rfcomm.const import *
 
 def gen_random_data(len):
     return b''.join(random.choices([bytes([x]) for x in range(0x00, 0x100)], k=len))
@@ -19,7 +19,7 @@ class DATA(RFCOMM):
         return 'UIH'
 
     @classmethod
-    def gen(cls,channel=0, transition=False, length=0, dir=0):
+    def gen(cls,channel=0, transition=False,fuzz=False, length=0, dir=0):
         ret = DATA()
         if transition:
             ret.addr = 0b00000001
@@ -30,12 +30,21 @@ class DATA(RFCOMM):
             ret.data = b"\x21"
             ret.length = 0
             return bytes(ret)
-        
+        elif fuzz:
+            ret.addr = 0b00000001
+            ret.addr |= 1 << 1 # C/R
+            ret.addr |= dir << 2 # Direction
+            ret.addr |= channel << 3
+            ret.control = RFCOMM_CONTROL.RC_CONTROL_UIH
+            ret.data = gen_random_data(31)
+            ret.length = gen_param(0b01111111, 1, (0b00000000, 0b01111111))
+            return bytes(ret)
+
+
         ret.addr = 0b00000001
         ret.addr |= 1 << 1 # C/R
         ret.addr |= dir << 2 # Direction
         ret.addr |= channel << 3
-        ret.addr 
         ret.control = RFCOMM_CONTROL.RC_CONTROL_UIH
 
         ret.data = gen_random_data(length)

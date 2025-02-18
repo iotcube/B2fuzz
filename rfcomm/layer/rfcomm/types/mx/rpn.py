@@ -1,5 +1,5 @@
 import random
-from layer.rfcomm.const import MX_TYPE
+from layer.rfcomm.const import *
 
 class RPN:
     def __init__(self):
@@ -39,9 +39,7 @@ class RPN:
         ret += bytes([self.type])
         ret += bytes([17])
         ret += bytes([
-            self.EA +
-            (1<<1) +
-            (self.DLCI << 2)
+            self.DLCI
         ])
         ret += bytes([
             self.BR
@@ -67,19 +65,19 @@ class RPN:
         return 'RPN'
 
     @classmethod
-    def gen(cls, transition=False, channel=0, dir=0):
+    def gen(cls, transition=False, fuzz=False, channel=0, dir=0):
         ret = RPN()
         ret.type = MX_TYPE.MX_RPN
-        ret.DLCI = channel << 1 | dir
+        ret.DLCI = gen_param(0b00000011, 1, (0b00000011, 0b11111011))
         ret.EA = 1
         ret.BR = random.randint(0, 8) # RFCOMM_RPN_BR_230400 = 8
-        ret.DB = 3 #random.randint(0, 4)
-        ret.SB = 0 #random.randint(0, 1)
-        ret.P = 0 #random.randint(0, 1)
+        ret.DB = random.randint(0, 4)
+        ret.SB = random.randint(0, 1)
+        ret.P = random.randint(0, 1)
         ret.PT = 0
-        ret.FC = 0x00
-        ret.XON = 0x11
-        ret.XOFF = 0x13
+        ret.FC = gen_param(0x00, 1, (0b00000000, 0b11111111))
+        ret.XON = gen_param(0x11, 1, (0b00000000, 0b11111111))
+        ret.XOFF = gen_param(0x13, 1, (0b00000000, 0b11111111))
         ret.PM_bit_rate = random.randint(0, 1)
         ret.PM_data_bits = random.randint(0, 1)
         ret.PM_stop_bits = random.randint(0, 1)

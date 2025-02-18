@@ -20,7 +20,7 @@ class INVALID:
         return 'INVALID'
 
     @classmethod
-    def gen(cls, transition=False, channel=0, dir=0):
+    def gen(cls, transition=False, fuzz=False, channel=0, dir=0):
         ret = INVALID()
         ret.type = (random.randint(0, 63) << 2) + (0<<1) + 1
         return bytes(ret)

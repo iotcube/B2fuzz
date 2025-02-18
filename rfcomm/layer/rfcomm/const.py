@@ -1,3 +1,4 @@
+from random import randint, randrange, choices, choice
 RFCOMM_PSM = 0x3
 
 crc_table: list = [
@@ -52,3 +53,136 @@ class MX_TYPE:
     MX_RPN = 0b10010011
     MX_RLS = 0b01010011
     MX_NSC = 0b00010011
+
+
+def xor(a, b):
+    return bytes(_a ^ _b for _a, _b in zip(a, b))
+
+# len: 입력값의 길이 (단위: 바이트)
+def bitflip(p: int, l: int) -> int:
+    assert 0 <= p <= ((1 << (l * 8)) - 1) and l <= 2
+
+    op = randint(0, 2 if l == 1 else 3)
+    result = p.to_bytes(l, 'big')
+
+    if op == 0:
+        key = b'\xff' * l
+    
+    elif op == 1:
+        if l == 1:
+            key = b'\x81'
+        else:
+            key = b'\x80' + b'\x00' * (l - 2) + b'\x01'
+
+    # 4/1
+    elif op == 2:
+        if l == 1:
+            key = b'\xA5'
+        else:
+            key = b'\xA0' + b'\x00' * (l - 2) + b'\x05'
+
+    # 16/8
+    elif op == 3:
+        assert l == 2
+        key = b'\xff\x00'
+
+    else:
+        assert False
+
+    result = xor(result, key)
+
+    result = int.from_bytes(result, byteorder='big')
+    return result
+
+def arithmetic(p: int, l: int) -> int:
+    assert 0 <= p <= ((1 << (l * 8)) - 1) and l <= 2
+
+    op = randint(0, 0 if l == 1 else 1)
+    inc_or_dec = randint(0, 1)
+
+    # 8/8
+    if op == 0:
+        if l == 1:
+            if inc_or_dec:
+                p += 1
+            else:
+                p -= 1
+            p = p % ((1 << (l * 8)))
+        else:
+            hb = p // 0x100
+            lb = p % 0x100
+            if inc_or_dec:
+                hb += 1
+                lb += 1
+            else:
+                hb -= 1
+                lb -= 1
+            hb = hb % ((1 << ((l - 1) * 8)))
+            p = (hb << ((l - 1) * 8)) | lb
+
+    # 16/8
+    elif op == 1:
+        if inc_or_dec:
+            p += 1
+        else:
+            p -= 1
+        p = p % (1 << (l * 8))
+    else:
+        assert False
+
+    return p
+
+def random_byte(p: int, l: int) -> int:
+    assert 0 <= p <= ((1 << (l * 8)) - 1) and l <= 2
+    
+    if l == 1:
+        p = randrange(0x00, 0x100) 
+
+    elif l == 2:
+        hb = p // 0x100
+        lb = p % 0x100
+
+        op = randint(0, 2)
+
+        # randomize hb
+        if op == 0:
+            p = (randrange(0x00, 0x100) << 8) | lb
+        # randomize lb
+        elif op == 1:
+            p = (hb << 8) | (randrange(0x00, 0x100))
+        else:
+            p = randrange(0x00, 0x10000)
+
+    else:
+        assert False
+
+    return p
+
+def zero_padding(p: int, l: int) -> int:
+    assert 0 <= p <= ((1 << (l * 8)) - 1) and l <= 2
+    return 0
+
+def crossover(p: int, l: int) -> int:
+    assert 0 <= p <= ((1 << (l * 8)) - 1) and l <= 2
+    if l == 1:
+        hhb = p // 0x10
+        lhb = p % 0x10
+        p = (lhb << 4) | hhb
+    else:
+        hb = p // 0x100
+        lb = p % 0x100
+        p = (lb << 8) | hb
+    return p
+
+
+def gen_param(origin, bytelen, condition):
+
+    opers = [bitflip, arithmetic, random_byte, zero_padding, crossover]
+    oper_idx = randrange(0, len(opers))
+    result = opers[oper_idx](origin, bytelen)
+    while (1):
+        oper_idx = randrange(0, len(opers))
+        result = opers[oper_idx](origin, bytelen)
+        if (condition[0] <= result < condition[1]):
+            break
+    return result

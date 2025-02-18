@@ -23,7 +23,7 @@ class RLS:
         return 'RLS'
 
     @classmethod
-    def gen(cls, transition=False, channel=0, dir=0):
+    def gen(cls, transition=False, fuzz = False, channel=0, dir=0):
         ret = RLS()
         ret.DLCI = channel << 3 | dir << 2 | 0b11 # EA == 1, one padding == 1
         ret.line_status = random.choice([

@@ -70,10 +70,10 @@ def fuz_send_pkt(bt_addr, sock, pkt, state,path=None, channel_to_ctrl=0):
     is_crashed = False
     try:
         if pkt not in RFCOMM_CMD:
-            tmp_pkt = pkt.gen(channel=channel_to_ctrl)
+            tmp_pkt = pkt.gen(channel=channel_to_ctrl, fuzz=True)
             sock.send(tmp_pkt)
         else:
-            tmp_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel_to_ctrl, transition=False, mx_type=pkt)
+            tmp_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel_to_ctrl, transition=False,fuzz=True, mx_type=pkt)
             sock.send(tmp_pkt)
         pkt_info = {}
         pkt_info['no'] = pkt_cnt
@@ -130,6 +130,7 @@ def closed_state_fuzzing(target_addr, state_frame, ch=0):
     print("[-] current state: closed")
     global tmp_pkt
     global crash_cnt
+    #sock = closed(target_addr)
     for _ in range(MUTATION_CNT): 
         sock = closed(target_addr)
         if sock:
@@ -155,11 +156,15 @@ def closed_state_fuzzing(target_addr, state_frame, ch=0):
             if(pkt_info == ""): pass
             else: logger.inputQueue(pkt_info)
             break
-    time.sleep(0.1)
+
+    #sock.close()
     return is_crashed
 
 def open_ctrl_ch_state_fuzzing(target_addr, state_frame, ch=0):
+    global tmp_pkt
+    global crash_cnt
     print("[-] current state: open_ctrl_ch")
+    #sock = opened_ctrl_ch(target_addr)
     for _ in range(MUTATION_CNT): 
         sock = opened_ctrl_ch(target_addr)
         if sock:
@@ -185,13 +190,15 @@ def open_ctrl_ch_state_fuzzing(target_addr, state_frame, ch=0):
             if(pkt_info == ""): pass
             else: logger.inputQueue(pkt_info)
             break
-    time.sleep(0.1)
+
+    #sock.close()
     return is_crashed
 
 def closed_normal_ch_state_fuzzing(target_addr, state_frame, ch):
     print("[-] current state: closed_normal_ch")
     global tmp_pkt
     global crash_cnt
+    #sock = closed_normal_ch(target_addr, ch)
     for _ in range(MUTATION_CNT): 
         sock = closed_normal_ch(target_addr, ch)
         if sock:
@@ -217,13 +224,15 @@ def closed_normal_ch_state_fuzzing(target_addr, state_frame, ch):
             if(pkt_info == ""): pass
             else: logger.inputQueue(pkt_info)
             break
-    time.sleep(0.1)
+
+    #sock.close()
     return is_crashed
 
 def opened_normal_ch_state_fuzzing(target_addr, state_frame, ch):
     print("[-] current state: opened_normal_ch")
     global tmp_pkt
     global crash_cnt
+    #sock = open_normal_ch(target_addr, ch)
     for _ in range(MUTATION_CNT): 
         sock = open_normal_ch(target_addr, ch)
         if sock:
@@ -250,7 +259,8 @@ def opened_normal_ch_state_fuzzing(target_addr, state_frame, ch):
             if(pkt_info == ""): pass
             else: logger.inputQueue(pkt_info)
             break
-    time.sleep(0.1)
+
+    #sock.close()
     return is_crashed
 
 
@@ -258,6 +268,7 @@ def opened_normal_ch_with_msc_state_fuzzing(target_addr, state_frame, ch):
     print("[-] current state: opened_normal_ch_with_msc")
     global tmp_pkt
     global crash_cnt
+    #sock, _ = open_normal_ch_with_msc(target_addr, ch)
     for _ in range(MUTATION_CNT): 
         sock, _ = open_normal_ch_with_msc(target_addr, ch)
         if sock:
@@ -283,13 +294,22 @@ def opened_normal_ch_with_msc_state_fuzzing(target_addr, state_frame, ch):
             if(pkt_info == ""): pass
             else: logger.inputQueue(pkt_info)
             break
-    time.sleep(0.1)
+
+    #sock.close()
     return is_crashed
 
 def new_state_fuzzing(target_addr, state_frame, ch, state, path):
     print(f"[-] current state: new_state{state - 4}")
     global tmp_pkt
     global crash_cnt
+    #if path[state - 5][0] == open_normal_ch_with_msc:
+    #    sock, _ = open_normal_ch_with_msc(target_addr, ch)
+    #else:
+    #    sock = path[state - 5][0](target_addr, ch)
+    #if sock:
+    #    sock.send(path[state - 5][1])
+    #else:
+    #    sock = False
     for _ in range(MUTATION_CNT):
         if path[state - 5][0] == open_normal_ch_with_msc:
             sock, _ = open_normal_ch_with_msc(target_addr, ch)
@@ -322,7 +342,8 @@ def new_state_fuzzing(target_addr, state_frame, ch, state, path):
             if(pkt_info == ""): pass
             else: logger.inputQueue(pkt_info)
             break
-    time.sleep(0.1)
+
+    #sock.close()
     return is_crashed
 
 def mutation_in_normal_state(target_addr, sm, path):
@@ -367,16 +388,17 @@ def fuzzing(target_addr, profile, port, adaptive_state_frame, test_info, path):
     now = datetime.now()
     tmp = 0
     i=0
+    crash2 = False
     test_info["starting_time"] = str(now)
     logger.init_info(test_info)
     if(profile == "None" or port == "None"):
         print('Cannot Fuzzing')
         return
     print("Start Fuzzing... Please hit Ctrl + C to finish...")
-
     logger.start = time.time()
     try:
         while True:
+            logger.inputQueue("***********************Fuzz_start********************")
             print("[+] Tested %d packets" % (pkt_cnt))
             loggerDict = {}
             #is_crashed = False
@@ -384,7 +406,11 @@ def fuzzing(target_addr, profile, port, adaptive_state_frame, test_info, path):
             if is_crashed:
                 logger.inputQueue("**ITEREND**")
                 logsave(loggerDict)
-                continue
+                if l2ping(target_addr) == False:
+                    break
+                else:
+                    sleep(1)
+                    continue
             #is_crashed = mutation_in_adaptive_state(target_addr, adaptive_state_frame)
             #if is_crashed:
             #    break
@@ -393,11 +419,11 @@ def fuzzing(target_addr, profile, port, adaptive_state_frame, test_info, path):
             logsave(loggerDict)
             print("********************************************************************")
            
-            if pkt_cnt > 2000000:
-                print('[*] Save logfile')
-                print('iteration END@@@@@@@@@@')
-                logsave(loggerDict)
-                break
+            #if pkt_cnt > 2000000:
+            #    print('[*] Save logfile')
+            #    print('iteration END@@@@@@@@@@')
+            #    logsave(loggerDict)
+            #    break
 
         if is_crashed:
             print('[*] Save logfile')
