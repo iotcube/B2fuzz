@@ -43,6 +43,7 @@ def closed(target_addr, ch=0):
         sock.connect((target_addr, RFCOMM_PSM))
     except Exception as e:
         print(e)
+        sock.close()
         return False
     return sock
 
@@ -54,9 +55,11 @@ def opened_ctrl_ch(target_addr, ch=0):
     try:
         conn_rsp, sock = inter_recv(sock)
     except:
+        sock.close()
         return False
     if conn_rsp == None or conn_rsp == b"":
         print('[*] recv failed.')
+        sock.close()
         return False
     else:  
         frame_pkt = FRAME_PKT(conn_rsp)
@@ -64,6 +67,7 @@ def opened_ctrl_ch(target_addr, ch=0):
         if res:
             if res != "UA":
                 print(f"[*] cannot open channel0")
+                sock.close()
                 return False
     return sock
 
@@ -86,9 +90,11 @@ def closed_normal_ch(target_addr, channel):
                     break
                 else:
                     print(f"[*] cannot open channel{channel}")
+                    sock.close()
                     return False
     except:
         print(f"[*] cannot open channel{channel}")
+        sock.close()
         return False
 
     return sock 
@@ -106,9 +112,11 @@ def establish_dlci(sock, channel):
                     break
                 else:
                     print(f"[*] cannot open channel{channel}")
+                    sock.close()
                     return False
     except:
         print(f"[*] cannot open channel{channel}")
+        sock.close()
         return False
 
     return sock 

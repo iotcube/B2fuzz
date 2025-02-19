@@ -137,7 +137,7 @@ def closed_state_fuzzing(target_addr, state_frame, ch=0):
             is_crashed = fuz_send_pkt(target_addr, sock, random.choice(state_frame[CTRL_CHANNEL][CLOSED]), CLOSED)
             sock.close()
         else:
-            print(f"[-] Crash Found - State violation detected")
+            print(f"[-] Crash Found - State violation detected at closed_state")
             print("Crash Packet :", tmp_pkt)
             crash_cnt += 1
 
@@ -171,7 +171,7 @@ def open_ctrl_ch_state_fuzzing(target_addr, state_frame, ch=0):
             is_crashed = fuz_send_pkt(target_addr, sock, random.choice(state_frame[CTRL_CHANNEL][OPENED_CTRL_CH]), OPENED_CTRL_CH)
             sock.close()
         else:
-            print(f"[-] Crash Found - State violation detected")
+            print(f"[-] Crash Found - State violation detected at opened_ctrl_chanel")
             print("Crash Packet :", tmp_pkt)
             crash_cnt += 1
 
@@ -205,7 +205,7 @@ def closed_normal_ch_state_fuzzing(target_addr, state_frame, ch):
             is_crashed = fuz_send_pkt(target_addr, sock, random.choice(state_frame[ch][CLOSED_NORMAL_CH]), CLOSED_NORMAL_CH, channel_to_ctrl=ch)
             sock.close()
         else:
-            print(f"[-] Crash Found - State violation detected")
+            print(f"[-] Crash Found - State violation detected at closed normal ch")
             print("Crash Packet :", tmp_pkt)
             crash_cnt += 1
 
@@ -240,7 +240,7 @@ def opened_normal_ch_state_fuzzing(target_addr, state_frame, ch):
             sock.close()
          
         else:
-            print(f"[-] Crash Found - State violation detected")
+            print(f"[-] Crash Found - State violation detected at opened_normal_channel_state")
             print("Crash Packet :", tmp_pkt)
             crash_cnt += 1
 
@@ -323,7 +323,7 @@ def new_state_fuzzing(target_addr, state_frame, ch, state, path):
             is_crashed = fuz_send_pkt(target_addr, sock, random.choice(RFCOMM_CMD + RFCOMM_FRAME), state, path, channel_to_ctrl=ch)
             sock.close()
         else:
-            print(f"[-] Crash Found - State violation detected")
+            print(f"[-] Crash Found - State violation detected at {state2str(state)}")
             print("Crash Packet :", tmp_pkt)
             crash_cnt += 1
 
