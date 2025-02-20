@@ -409,7 +409,7 @@ def fuzzing(target_addr, profile, port, adaptive_state_frame, test_info, path):
                 if l2ping(target_addr) == False:
                     break
                 else:
-                    sleep(1)
+                    time.sleep(1)
                     continue
             #is_crashed = mutation_in_adaptive_state(target_addr, adaptive_state_frame)
             #if is_crashed:
