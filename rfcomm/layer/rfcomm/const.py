@@ -176,10 +176,31 @@ def crossover(p: int, l: int) -> int:
 
 
 def gen_param(origin, bytelen, condition):
+    """
+    AFL mutator
 
+    Parameters
+    ----------
+    - origin: [bytes] original bytes
+    - bytelen: [int] bytes length to make
+    - condition: [tuple] ([int] under bound, [int] upper bound)
+    
+    Returns
+    ----------
+    - [bytes] mutates bytes
+
+    """
+
+    # [1] AFL mutation operation
     opers = [bitflip, arithmetic, random_byte, zero_padding, crossover]
+    
+    # [2] select random operation
     oper_idx = randrange(0, len(opers))
+
+    # [3] mutate original bytes
     result = opers[oper_idx](origin, bytelen)
+    
+    # [4] select the bytes meets condition
     while (1):
         oper_idx = randrange(0, len(opers))
         result = opers[oper_idx](origin, bytelen)

@@ -26,10 +26,27 @@ from layer.rfcomm.types.data import DATA
 
 # Base state in RFCOMM
 CLOSED = 0
+"""
+Base state: initial state
+"""
 OPENED_CTRL_CH = 1
+"""
+Base state: after SABM, UA communication for control channel
+"""
+
 CLOSED_NORMAL_CH = 2
+"""
+Base state: after PN exchange for target profile
+"""
 OPENED_NORMAL_CH = 3
+"""
+Base state: after SABM, UA exchange for target profile
+"""
 OPENED_NORMAL_CH_WITH_MSC = 4
+"""
+Base stete: after MSC exchange for target profile
+"""
+
 
 # Control channel(DLCI = 0)
 CTRL_CHANNEL = 0
@@ -326,12 +343,35 @@ def open_new_chan(target_addr, channel):
         return False, False
 
 def establish_new_dlci(sock, new_ch):
+    """
+    Recieve SABM request from target and respond with UA
+    
+    This situation is observed redmi buds pro.
+
+    RFCOMM/DEVB/RFC/BV-06-C test suit senario
+
+    Parameters
+    ----------
+     - sock: bluetooth socket
+     - new_ch: [int] channel to accept 
+
+    Raises
+    ----------
+     - bluetooth error
+
+    Returns
+    ----------
+     - bluetooth socket
+     - False (If there is not SABM request)
+    """
     try:
+    # [1] Wait SABM request
         while True:
             conn_rsp, sock = inter_recv(sock)
             frame_pkt = FRAME_PKT(conn_rsp)
             res = frame_pkt.parse_pkt()
             if res:
+    # [2] If recieved fram is SABM, accept that request by sending UA frame
                 if res == "SABM":
                     sock.send(UA.gen(transition=True, channel=new_ch>>1, dir=new_ch&0b1))
                     break
@@ -347,6 +387,26 @@ def establish_new_dlci(sock, new_ch):
 
 
 def new_chan_msc(sock, channel, dir):
+    """
+    Make MSC exchange for transfering profile data
+
+    RFCOMM/DEVA-DEVB/RFC/BV-22-C test suit senario
+
+    Parameters
+    ----------
+     - sock: bluetooth socket
+     - channel: [int] target profile DLCI
+     - dir: [int] direction bit (normally 0)
+
+
+    Raises
+    ----------
+     - bluetooth error
+
+    Returns
+    ----------
+     - [tuple] (bluetooth socket, [bool] True if MSC exchange is done, else False)
+    """
     sock.send(UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=channel, transition=True, mx_type=MSC, dir=dir))
     is_msc = False    
     try:
@@ -365,6 +425,9 @@ def new_chan_msc(sock, channel, dir):
     return sock, is_msc
 
 def find_state(sock):
+    """
+    NOT USED
+    """
     is_new_state = False
     try:
         while True:

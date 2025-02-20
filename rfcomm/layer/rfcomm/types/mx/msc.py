@@ -4,6 +4,31 @@ from layer.rfcomm.const import *
 length = 2
 
 class MSC:
+    """
+    MSC MX command generator class\n
+
+    Parameters
+    ----------
+     -
+    
+    Attributes
+    ----------
+    - self.type: [int] command type field
+    - self.DLCI: [int] DLCI 
+    - self.EA: [int] EA bit
+    - self.FC: [int] FC bit
+    - self.RTC: [int] RTC bit
+    - self.reserved: [int] reserved bit
+    - self.reserved2: [int] reserved bit
+    - self.IC: [int] IC bit
+    - self.DV: [int] DV
+
+    Methods
+    ----------
+     - `.__bytes__()`
+     - `.name()`
+     - `.gen()`
+    """
     def __init__(self):
         self.type = MX_TYPE.MX_MSC# + (random.randint(0,1)<<1)
         self.DLCI = 0
@@ -21,6 +46,24 @@ class MSC:
         return 0
     
     def __bytes__(self) -> bytes:
+        """
+        When byte() method is called, this method is runed\n
+
+        Note
+        -----
+        MSC type has 2 data field so the length field is set to 0x05
+
+        ```
+        length_field value == length*2 + 1
+        ```
+
+        Attributes like DV, IC,,, is **bit** type data.
+        
+
+        Returns
+        --------
+        - [bytes]: MSC type command 
+        """
         ret = b''
         ret += bytes([self.type])
         ret += bytes([5])
@@ -38,11 +81,38 @@ class MSC:
         return ret
     
     def name():
+        """
+        Return MSC command name
+
+        
+        Returns
+        --------
+        - [string] MSC frame name
+        """
         return 'MSC'
 
     @classmethod
     def gen(cls, transition=False, fuzz= False, channel=0, dir=0):
+        """
+            Generate MSC command
+
+            Parameters
+            ----------
+            - channel: [int] DLCI to send frame
+            - transition: [bool] transition condition (used state transition)
+            - fuzz: [bool] fuzz condition (used when fuzzing)
+            - dir: [int] direction bit
+
+
+            Returns
+            ----------
+            - [bytes] MSC command
+        """
+
+        # [1] initialize MSC generator class       
         ret = MSC()
+
+        # [2] when transition, initialize MSC command with information for transition  
         if transition:
             ret.DV = 1
             ret.IC = 0
@@ -54,6 +124,8 @@ class MSC:
             ret.reserved = 0
             ret.reserved2 = 0
             return bytes(ret)
+        
+        # [3] when fuzzing, initialize MSC command with AFL mutator
         elif fuzz:
             ret.DV = random.randint(0,1)
             ret.FC = random.randint(0,1)

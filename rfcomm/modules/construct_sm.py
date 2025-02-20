@@ -470,6 +470,14 @@ def expand_sm(sm, initial_channel, target_addr):
                             # [2-1-2] Send RFCOMM frame and expand SM
                                 send_frame(sock, frame, ch,state,CTRL_CHANNEL, sm, ret, closed)
                                 sock.close()
+
+                                # ANOMALY DETECTION
+                                sock = closed(target_addr)
+                                if sock:
+                                    sock.close()
+                                else:
+                                    raise SMTraverseError(f"cannot traverse {state2str(state)}")
+                                
                             # [2-1-3] if fuzzer cannot move to CLOSED state, raise SMTraverseError -> state machine violation
                             else:
                                 raise SMTraverseError(f"cannot traverse {state2str(state)}")
@@ -484,6 +492,14 @@ def expand_sm(sm, initial_channel, target_addr):
                             # [2-1-2] Send RFCOMM frame and expand SM
                                 send_frame(sock, frame, ch, state,CTRL_CHANNEL, sm, ret, opened_ctrl_ch)
                                 sock.close()
+
+                                # ANOMALY DETECTION
+                                sock = opened_ctrl_ch(target_addr)
+                                if sock:
+                                    sock.close()
+                                else:
+                                    raise SMTraverseError(f"cannot traverse {state2str(state)}")
+
                             # [2-1-3] if fuzzer cannot move to OPEN_CTRL_CH state, raise SMTraverseError -> state machine violation
                             else:
                                 raise SMTraverseError(f"cannot traverse {state2str(state)}")
@@ -502,6 +518,14 @@ def expand_sm(sm, initial_channel, target_addr):
                             # [3-1-2] Send RFCOMM frame and expand SM
                                 send_frame(sock, frame, ch, state, initial_channel, sm, ret, closed_normal_ch)
                                 sock.close()
+
+                                # ANOMALY DETECTION
+                                sock = closed_normal_ch(target_addr, initial_channel)
+                                if sock:
+                                    sock.close()
+                                else:
+                                   raise SMTraverseError(f"cannot traverse {state2str(state)}") 
+
                             # [3-1-3] if fuzzer cannot move to CLOSED_NORMAL_CH state, raise SMTraverseError -> state machine violation
                             else:
                                 raise SMTraverseError(f"cannot traverse {state2str(state)}")
@@ -515,6 +539,14 @@ def expand_sm(sm, initial_channel, target_addr):
                             # [3-1-2] Send RFCOMM frame and expand SM
                                 send_frame(sock, frame, ch, state, initial_channel, sm, ret, open_normal_ch)
                                 sock.close()
+
+                                # ANOMALY DETECTION
+                                sock = open_normal_ch(target_addr, initial_channel)
+                                if sock:
+                                    sock.close()
+                                else:
+                                    raise SMTraverseError(f"cannot traverse {state2str(state)}")
+
                             # [3-1-3] if fuzzer cannot move to OPENED_NORMAL_CH state, raise SMTraverseError -> state machine violation
                             else:
                                 raise SMTraverseError(f"cannot traverse {state2str(state)}")
@@ -529,6 +561,14 @@ def expand_sm(sm, initial_channel, target_addr):
                             # [3-1-2] Send RFCOMM frame and expand SM
                                 send_frame(sock, frame, ch, state, initial_channel, sm, ret, open_normal_ch_with_msc)
                                 sock.close()
+
+                                # ANOMALY DETECTION
+                                sock, _ = open_normal_ch_with_msc(target_addr, initial_channel)
+                                if sock:
+                                    sock.close()
+                                else:
+                                    raise SMTraverseError(f"cannot traverse {state2str(state)}")
+
                             # [3-1-3] if fuzzer cannot move to OPENED_NORMAL_CH_WITH_MSC state, raise SMTraverseError -> state machine violation
                             else:
                                 raise SMTraverseError(f"cannot traverse {state2str(state)}")
@@ -547,6 +587,14 @@ def expand_sm(sm, initial_channel, target_addr):
                             # [4-1-2] Send RFCOMM frame and expand SM
                                 send_frame(sock, frame, ch, state, ch, sm, ret, open_new_chan)
                                 sock.close()
+
+                                # ANOMALY DETECTION
+                                sock, _  = open_new_chan(target_addr, initial_channel)
+                                if sock:
+                                    sock.close()
+                                else:
+                                    raise SMTraverseError(f"cannot traverse {state2str(state)}")
+
                             # [4-1-3] if fuzzer cannot move to CLOSED_NORMAL_CH state, raise SMTraverseError -> state machine violation
                             else:
                                 raise SMTraverseError(f"cannot traverse {state2str(state)}")
@@ -563,6 +611,18 @@ def expand_sm(sm, initial_channel, target_addr):
                             if sock:
                                 send_frame(sock, frame, ch, state, ch, sm, ret, establish_new_dlci)
                                 sock.close()
+
+                                # ANOMALY DETECTION
+                                sock , new_dlci= open_new_chan(target_addr, initial_channel)
+                                if sock:
+                                    sock = establish_dlci(sock, new_dlci)
+                                else:
+                                    raise SMTraverseError(f"cannot traverse {state2str(state)}")
+                                if sock:
+                                    sock.close()
+                                else:
+                                    raise SMTraverseError(f"cannot traverse {state2str(state)}")
+
                             # [4-1-3] if fuzzer cannot move to OPENED_NORMAL_CH state, raise SMTraverseError -> state machine violation
                             else:
                                 raise SMTraverseError(f"cannot traverse {state2str(state)}")
@@ -583,6 +643,22 @@ def expand_sm(sm, initial_channel, target_addr):
                             if sock:
                                 send_frame(sock, frame, ch, state, ch, sm, ret, new_chan_msc)
                                 sock.close()
+
+                                # ANOMALY DETECTION
+                                sock , new_dlci= open_new_chan(target_addr, initial_channel)
+                                if sock:
+                                    sock = establish_dlci(sock, new_dlci)
+                                else:
+                                    raise SMTraverseError(f"cannot traverse {state2str(state)}")
+                                if sock:
+                                    sock, msc = new_chan_msc(sock, new_dlci>>1, new_dlci&0b1)
+                                else:
+                                    raise SMTraverseError(f"cannot traverse {state2str(state)}")
+                                if sock:
+                                    sock.close()
+                                else:
+                                    raise SMTraverseError(f"cannot traverse {state2str(state)}")
+
                             # [4-1-3] if fuzzer cannot move to OPENED_NORMAL_CH_WITH_MSC state, raise SMTraverseError -> state machine violation
                             else:
                                 raise SMTraverseError(f"cannot traverse {state2str(state)}")
