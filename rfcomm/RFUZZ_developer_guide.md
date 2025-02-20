@@ -1,6 +1,6 @@
-# RFUZZ 
+# RFCOMM Fuzzer
 ---
- RFUZZ is Bluetooth RFCOMM layer fuzzer. It conduct stateful fuzzing with expanded crash monitoring.
+ This module is Bluetooth RFCOMM layer fuzzer. It conduct stateful fuzzing with expanded crash monitoring.
 
 # Developer Guide
 
