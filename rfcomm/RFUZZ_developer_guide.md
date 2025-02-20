@@ -65,8 +65,8 @@ rfcomm ------+----main.py
  This module constructs base state machine and adaptive state machine
 ![image](https://github.com/user-attachments/assets/ac05a563-e36b-4d94-8920-5dc1f0869df5)
 
-  In the `construct_sm()` function, the module conducts conformance testing for the RFCOMM test suite. The function constructs a state machine that aligns with the RFCOMM test suite scenario, referring to this state machine as the **base SM**.
-  After creating the base SM, the module expands it by sending all possible RFCOMM frames and commands while visiting each base state. During this expansion process, **the state anomaly detection logic** is also executed. This logic confirms whether the base state can be revisited normally after testing an RFCOMM frame, thereby detecting any abnormalities. Through this approach, it becomes possible to preemptively identify potential crashes that could result from previously transmitted frames.
+ In the `construct_sm()` function, the module conducts conformance testing for the RFCOMM test suite. The function constructs a state machine that aligns with the RFCOMM test suite scenario, referring to this state machine as the **base SM**.
+ After creating the base SM, the module expands it by sending all possible RFCOMM frames and commands while visiting each base state. During this expansion process, **the state anomaly detection logic** is also executed. This logic confirms whether the base state can be revisited normally after testing an RFCOMM frame, thereby detecting any abnormalities. Through this approach, it becomes possible to preemptively identify potential crashes that could result from previously transmitted frames.
 
 
 ---
