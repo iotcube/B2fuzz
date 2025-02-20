@@ -94,6 +94,9 @@ The fuzzer ends after transmitting 2,000,000 packets. If you want to quit before
 ```
 Ctrl+C
 ```
+### Contrubute RFCOMM Fuzzer
+
+See `RFUZZ_developer_guid.md` file in `module` directory
 
 ### Log file
 
