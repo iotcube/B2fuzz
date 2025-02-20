@@ -101,7 +101,7 @@ The log file will be generated after fuzz testing in log/ folder.
 
 # Contrubute RFCOMM Fuzzer
 
-See `RFUZZ_developer_guid.md` file in `module` directory
+See `RFUZZ_developer_guid.md` file in `rfcomm` directory
 
 # Crash Monitor
 
