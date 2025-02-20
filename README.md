@@ -141,6 +141,6 @@ Refer to the README file in the Bluetooth Crash Replay directory for more detail
 
 ## Others
 
-- Contacts: dlehgus1023@naver.com, pingjuu@korea.ac.kr, Computer & Communication Security Lab (https://ccs.korea.ac.kr)
+- Contacts: dlehgus1023@naver.com, pingjuu@korea.ac.kr, hoonsang99@korea.ac.kr Computer & Communication Security Lab (https://ccs.korea.ac.kr)
 - It will be uploaded on the IoTcube Platform.
 - B2FUZZ's research on the L2CAP layer is scheduled to be presented as BLOOMFUZZ at ESORICS 2024.
