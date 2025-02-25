@@ -99,6 +99,10 @@ Ctrl+C
 
 The log file will be generated after fuzz testing in log/ folder.
 
+# Contrubute RFCOMM Fuzzer
+
+See `RFUZZ_developer_guid.md` file in `rfcomm` directory
+
 # Crash Monitor
 
 We provide crash monitor at **android** and **linux** for capture crash log.
@@ -137,6 +141,6 @@ Refer to the README file in the Bluetooth Crash Replay directory for more detail
 
 ## Others
 
-- Contacts: dlehgus1023@naver.com, pingjuu@korea.ac.kr, Computer & Communication Security Lab (https://ccs.korea.ac.kr)
+- Contacts: dlehgus1023@naver.com, pingjuu@korea.ac.kr, hoonsang99@korea.ac.kr Computer & Communication Security Lab (https://ccs.korea.ac.kr)
 - It will be uploaded on the IoTcube Platform.
 - B2FUZZ's research on the L2CAP layer is scheduled to be presented as BLOOMFUZZ at ESORICS 2024.

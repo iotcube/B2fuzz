@@ -65,8 +65,9 @@ def l2ping(bt_addr):
 	3) if l2ping finds packet lost, it is crash!
 	+ You need to check the target device's condition. (Error pop-up or crash dump.)
 	"""
-	l2pingRes = subprocess.run(['l2ping',str(bt_addr),"-c","3"],stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+	l2pingRes = subprocess.run(['l2ping',bt_addr,"-c","3"],stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 	try:
+		print(l2pingRes)
 		failureRate = str(l2pingRes.stdout).split()[-2]
 		failureRate = int(failureRate.split("%")[0])
 	except ValueError:

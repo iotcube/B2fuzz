@@ -10,9 +10,30 @@ test_info["toolVer"] = "1.0.0"
 test_info["protocol"] = "RFCOMM"
 
 def main():
+    """
+    RFUZZ's main logic.
+    1. Scan nearby bt device and select target profile.
+    2. Perform fuzzing with RFCOMM state machine.
+
+    Parameters
+    ----------
+     -
+    
+    Raises
+    ----------
+     -
+
+    Returns
+    ----------
+     -
+    """
+
+    # [1] scan nearby bluetooth device
     global test_info
     test_info, target_addr = bluetooth_classic_scan(test_info)
 
+
+    # [2] search target device's available profile and select target profile
     while(1):
         test_info, target_service = bluetooth_services_and_protocols_search(target_addr, test_info)
         if target_service is False:
@@ -28,15 +49,16 @@ def main():
     print("\n===================Test Informatoin===================")
     print(json.dumps(test_info, ensure_ascii=False, indent="\t"))
     print("======================================================\n")
-    adaptive_state_frame = construct_android_adaptive_sm(target_addr)
-    pprint(parse_adaptive_state(adaptive_state_frame))
-    test_info["state machine"] = parse_adaptive_state(adaptive_state_frame)
-    start_time = str(datetime.now())
-    print('[*] Fuzzing Start...')
-    print(f'[*] Fuzzing Start Time : {start_time}')
-    test_info["starting_time"] = start_time
-    
-    fuzzing(target_addr, target_profile, target_profile_port, adaptive_state_frame, test_info)
 
+    # [3] construct base state machine
+    sm = construct_sm(target_addr, target_profile_port)
+
+    # [4] expand base state machine to adaptive state machine
+    exp_sm , path = expand_sm(sm, target_profile_port, target_addr)
+    test_info["state machine"] = print_sm(exp_sm)
+    
+    # [5] Perform stateful fuzzing
+    if exp_sm:
+        fuzzing(target_addr, target_profile, target_profile_port, exp_sm, test_info, path)
 if __name__ == '__main__':
     main()

@@ -53,6 +53,8 @@ if __name__== "__main__":
     # PreProcess
     statemachine, sock, dcid_value = SpecState_Pruning(target_addr, sock, target_profile_port, statemachine)
     CommCapture_Path, is_onetime = parse_option()
+
+    # Packet capture in common comunication
     capturedStateM = CommCapture(CommCapture_Path)
 
     Cluster_stateM = statemachine.Set_IsThere_Clustered_State(capturedStateM)

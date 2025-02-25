@@ -5,7 +5,7 @@ def calc_fcs(len, buf):
     for i in range(len):
         fcs = crc_table[fcs ^ buf[i]]
     return (0xff - fcs)
-
+   
 def rfc_check_fcs(len, buf, received_fcs):
     fcs = 0xff
     for i in range(len):

@@ -8,6 +8,7 @@ def bluetooth_services_and_protocols_search(bt_addr, test_info):
     print("\nStart scanning services...")
     print("\n\tList of profiles for the device")
     
+    print("\n\tNo.\tprofile\tname\tprotocol\tport(Channel)")
     services = bluetooth.find_service(address=bt_addr)
     if len(services) <= 0:
         print("No services found")
@@ -16,9 +17,9 @@ def bluetooth_services_and_protocols_search(bt_addr, test_info):
         i = 0
         for serv in services:
             if len(serv["profiles"]) == 0:
-                print("\t%02d. [None]: %s" % (i, serv["name"]))
+                print("\t%02d.\t[None]:\t%s\t%s\t%s" % (i, serv["name"], serv["protocol"], serv["port"]))
             else:
-                print("\t%02d. [0x%s]: %s" % (i, serv["profiles"][0][0], serv["name"]))
+                print("\t%02d.\t[0x%s]:\t%s\t%s\t%s" % (i, serv["profiles"][0][0], serv["name"], serv["protocol"], serv["port"]))
             i += 1
 
     while(True):
