@@ -10,12 +10,13 @@ def parse_option():
 
 def main():
     while True:
-        print('1. l2cap')
-        print('2. rfcomm')
+        print("List of supported protocol:")
+        print('1. L2CAP')
+        print('2. RFCOMM')
         CommCapture_Path, is_onetime = parse_option()
-        layer = int(input('> '))
+        layer = int(input('Choose option > '))
         if layer == 1:
-            args_list = ['python3.8', 'l2cap/main.py']
+            args_list = ['python3', 'l2cap/main.py']
             if CommCapture_Path is not None:
                 args_list.append('-p')
                 args_list.append(CommCapture_Path)
@@ -25,7 +26,7 @@ def main():
             subprocess.run(args_list)
             break
         elif layer == 2:
-            subprocess.run(['python3.8', 'rfcomm/main.py'])
+            subprocess.run(['python3', 'rfcomm/main.py'])
             break
         else: 
             continue

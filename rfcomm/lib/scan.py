@@ -1,5 +1,6 @@
 import sys, re
 import bluetooth
+from termcolor import colored
 
 def bluetooth_class_of_device(device_class):
     # https://github.com/mikeryan/btclassify.git
@@ -178,35 +179,47 @@ def bluetooth_classic_scan(test_info):
     """
     This scan finds ONLY Bluetooth Classic (non-BLE) devices
     """
-    print('Performing classic bluetooth inquiry scan...')
+    print('[~] Performing classic bluetooth inquiry scan...')
 
     while(True):
         # Scan for nearby devices in regular bluetooth mode
         nearby_devices = bluetooth.discover_devices(duration=3, flush_cache=True, lookup_names=True, lookup_class=True)
-        print("nearby devices : {}".format(len(nearby_devices)))
+        print(colored(f"[+] Found {len(nearby_devices)} device(s)", "yellow"))
+
+        print("  {:<4} {:<20} {:<35} {:<25}".format("[#]", "[BT address]", "[Device name]", "[Device Class(OUI)]"))
         i = 0
-        print("\n\tTarget Bluetooth Device List")
-        print("\t[No.]\t[BT address]\t\t[Device name]\t\t[Device Class]\t\t[OUI]")
         for addr, name, device_class in nearby_devices:
-            device_class = bluetooth_class_of_device(hex(device_class))
-            print("\t%02d.\t%s\t%s\t\t%s(%s)" % (i, addr, name, device_class["major"], device_class["minor"]))                
+            device_class_dict = bluetooth_class_of_device(hex(device_class))
+            major = device_class_dict["major"]
+            minor = device_class_dict["minor"]
+            
+            print("  {:<4} {:<20} {:<35} {:<25}".format(
+                f"{i:02d}.", addr, name[:35], f"{major}({minor})"))
             i += 1
+
+
+        # print("  [No.]\t[BT address]\t\t[Device name]\t\t[Device Class]\t\t[OUI]")
+        # for addr, name, device_class in nearby_devices:
+        #     device_class = bluetooth_class_of_device(hex(device_class))
+        #     print("  %02d.\t%s\t%s\t\t%s(%s)" % (i, addr, name, device_class["major"], device_class["minor"]))                
+        #     i += 1
         if len(nearby_devices) == 0:
             print("[-] No bluetooth device found. Did you connect an adapter?\n")
             sys.exit()
         elif len(nearby_devices) != 0:
-            print("\tFound %d devices" % len(nearby_devices))
+            print("-----------------------------------------------------------------------------------")
+            # print("\tFound %d devices" % len(nearby_devices))
             break
         else :
             sys.exit()
     
     while(True):
-        user_input = int(input("\nChoose Device : "))
+        user_input = int(input("[Q] Choose Device : "))
         if user_input < len(nearby_devices) and user_input > -1:
             idx = user_input
             break
         else:
-            print("[-] Out of range.")
+            print("[-] Invalid input.")
     
     addr_chosen = nearby_devices[idx][0]
     test_info["bdaddr"] = str(nearby_devices[idx][0])

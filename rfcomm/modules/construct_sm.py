@@ -2,6 +2,7 @@
 from .pairing import *
 from .mutation_new import *
 from collections import defaultdict
+import time
 import copy
 import os
 from transitions.extensions import GraphMachine
@@ -204,11 +205,13 @@ def construct_sm(target_addr, channel):
 
     ret = defaultdict(dict)
     try:
-        # [1] test closed state
+        # [1] Test RFCOMM initial state (CLOSED state)
         sock = closed(target_addr)
         if sock:
             ret[CTRL_CHANNEL][CLOSED] = [SABM]
             sock.close()
+
+        time.sleep(5)
 
         # [2] test opening controle channel(DLCI=0)
         # See RFCOMM/DEVA/RFC/BV-01-C in Test suit
@@ -222,9 +225,12 @@ def construct_sm(target_addr, channel):
             ret[CTRL_CHANNEL][OPENED_CTRL_CH] = [DISC, PN]
             sock.close()
 
+        time.sleep(5)
+
         # [3] test PN negotiation is possible
         # See RFCOMM/DEVA/RFC/BV-05-C in Test suit
         sock = closed_normal_ch(target_addr, channel)
+        time.sleep(5)
         if sock:
             vis.add_state(state2str(CLOSED_NORMAL_CH))
             vis.add_tr(state2str(OPENED_CTRL_CH), state2str(CLOSED_NORMAL_CH), frame2str(PN))
@@ -241,6 +247,8 @@ def construct_sm(target_addr, channel):
                 ret[channel][OPENED_NORMAL_CH] = [DISC, MSC]
             sock.close()
 
+        time.sleep(5)
+
         # [5] test MSC exchange.
         # See RFCOMM/DEVA-DEVB/RFC/BV-22-C in Test suit
         sock, _ = open_normal_ch_with_msc(target_addr, channel)
@@ -254,22 +262,30 @@ def construct_sm(target_addr, channel):
             ret[channel][OPENED_NORMAL_CH_WITH_MSC] = [DATA, DISC]
             sock.close()
 
+        time.sleep(5)
+
         # [6] Test if another DLCI opening request is recved.
         sock, new_dlci = open_new_chan(target_addr, channel)
+        time.sleep(5)
         if sock:
             vis.add_state(state2str(CLOSED_NORMAL_CH)+str(new_dlci>>1))
             vis.add_tr(state2str(OPENED_CTRL_CH), state2str(CLOSED_NORMAL_CH)+str(new_dlci>>1), frame2str(PN))
 
             ret[new_dlci>>1][CLOSED_NORMAL_CH] = [SABM]
 
+
+
         # [7] test opening DLCI for target profile.
         # See RFCOMM/DEVB/RFC/BV-06-C in Test suit
             sock = establish_new_dlci(sock, new_dlci)
+            time.sleep(5)
             if sock:
                 vis.add_state(state2str(OPENED_NORMAL_CH)+str(new_dlci>>1))
                 vis.add_tr(state2str(CLOSED_NORMAL_CH)+str(new_dlci>>1),state2str(OPENED_NORMAL_CH)+str(new_dlci>>1), frame2str(SABM))
                 vis.add_tr(state2str(OPENED_NORMAL_CH)+str(new_dlci>>1), state2str(CLOSED_NORMAL_CH)+str(new_dlci>>1), frame2str(DISC))
                 ret[new_dlci>>1][OPENED_NORMAL_CH] = [DISC, MSC]
+
+
 
         # [8] test MSC exchange.
         # See RFCOMM/DEVA-DEVB/RFC/BV-22-C in Test suit
@@ -281,6 +297,8 @@ def construct_sm(target_addr, channel):
                 vis.add_tr(state2str(OPENED_NORMAL_CH_WITH_MSC)+str(new_dlci>>1), state2str(OPENED_NORMAL_CH_WITH_MSC)+str(new_dlci>>1), frame2str(DATA))
                 ret[new_dlci>>1][OPENED_NORMAL_CH_WITH_MSC] = [DATA, DISC]
             sock.close()
+
+        time.sleep(5)
     except:
         pass
 
