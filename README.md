@@ -5,6 +5,7 @@ Discovering Bluetooth L2CAP and RFCOMM Vulnerabilities via Adaptive Stateful Fuz
 ## Prerequisites
 
 - Tested OS: Ubuntu 22.04 LTS
+- Package: graphviz
 - Library: libbluetooth-dev libpygraphviz-dev 
 - Python: version >3.8
 - Python modules: scapy, ouilookup, pybluez, transitions
