@@ -1,86 +1,36 @@
+# In rfcomm/layer/rfcomm/types/mx/test.py
+
 from layer.rfcomm.const import MX_TYPE
 
-length = 0
 class TEST:
     """
-    TEST MX command generator class\n
-
-    Parameters
-    ----------
-     -
-    
-    Attributes
-    ----------
-    - self.type: [int] command type bit
-
-    Methods
-    ----------
-     - `.__bytes__()`
-     - `.name()`
-     - `.gen()`
+    TEST MX command payload generator class.
     """
-    def __init__(self):
-        self.type = None
-        
-    @property
-    def length(self):
-        return 0
-    
-    def __bytes__(self):
-        """
-        When byte() method is called, this method is runed\n
-
-        Note
-        -----
-        TEST type has no data field so the length field is set to 0x01
-
-        ```
-        length_field value == length*2 + 1
-        ```
-
-
-        Returns
-        --------
-        - [bytes]: TEST type command 
-        """
-        ret = b''
-        ret += bytes([self.type])
-        ret += bytes([1])
-        return ret
-    
     def name():
-        """
-        Return TEST command name
-
-        
-        Returns
-        --------
-        - [string] TEST frame name
-        """
+        """Return TEST command name"""
         return 'TEST'
 
     @classmethod
-    def gen(cls, transition=False, fuzz=False, channel=0, dir=0):
+    def gen(cls, payload=None, **kwargs):
         """
-            Generate TEST command
+        Generates the inner payload for a TEST multiplexer command.
+        This consists of [type, length, data...].
 
-            Parameters
-            ----------
-            - channel: [int] DLCI to send frame
-            - transition: [bool] transition condition (used state transition)
-            - fuzz: [bool] fuzz condition (used when fuzzing)
-            - dir: [int] direction bit
+        Parameters
+        ----------
+        - payload: [bytes] The test pattern data. If None, an empty payload is used.
+        - **kwargs: Catches unused arguments for compatibility.
 
-
-            Returns
-            ----------
-            - [bytes] TEST command
+        Returns
+        ----------
+        - [bytes] The complete TEST command payload for insertion into a UIH frame.
         """
-        # [1] initialize INVALID generator class       
-        ret = TEST()
-
-        # [2] set type bit to TEST
-        ret.type = MX_TYPE.MX_TEST + (1<<1)
-
-        # [3] return bytes
-        return bytes(ret)
+        # Set a default empty payload if none is provided.
+        test_data = payload if payload is not None else b''
+        
+        # The command payload consists of its type, its length, and its data.
+        # This uses the constant from const.py DIRECTLY, without incorrect modification.
+        type_field = MX_TYPE.MX_TEST
+        length_field = (len(test_data) << 1) | 1  # Length of the test data
+        
+        return bytes([type_field, length_field]) + test_data

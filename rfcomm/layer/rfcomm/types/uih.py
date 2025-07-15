@@ -22,7 +22,9 @@ MX_TYPE = [
     PN,
     RLS,
     RPN,
-    TEST
+    TEST,
+    # Adding DATA allows it to be used as a multiplexer command type
+    DATA
 ]
 
 class UIH(RFCOMM):
@@ -58,7 +60,9 @@ class UIH(RFCOMM):
         ret += bytes([self.control])
         ret += bytes([(self.length << 1) + 1])
         ret += bytes(self.data)
-        ret += bytes([calc_fcs(2, ret)])
+        # Original FCS calculation
+        fcs_header = bytes([self.addr, self.control])
+        ret += bytes([calc_fcs(2, fcs_header)])
         return ret
     
     def name():
@@ -73,7 +77,7 @@ class UIH(RFCOMM):
         return 'UIH'
     
     @classmethod
-    def gen(cls,channel=0, channel_to_ctrl=0, transition=False, fuzz=False, mx_type=None, dir=0):
+    def gen(cls,channel=0, channel_to_ctrl=0, transition=False, fuzz=False, mx_type=None, dir=0, **kwargs):
         """
             Generate UIH type frame
 
@@ -85,6 +89,7 @@ class UIH(RFCOMM):
             - fuzz: [bool] fuzz condition (used when fuzzing)
             - mx_type: MX command type defined in `layer.rfcomm.types.mx`
             - dir: [int] direction bit
+            - **kwargs: Additional arguments for payload generators (e.g., `payload`, `credit`)
 
 
             Returns
@@ -101,11 +106,13 @@ class UIH(RFCOMM):
             ret.addr |= 1 << 1 # C/R
             ret.addr |= 0 << 2 # Direction
             ret.addr |= channel << 3
+            # THIS IS THE KEY: We use the original, unmodified control field.
             ret.control = RFCOMM_CONTROL.RC_CONTROL_UIH
             if mx_type is None:
                 ret.data = random.choice(MX_TYPE).gen()
             else:
-                ret.data = mx_type.gen(transition=transition, channel=channel_to_ctrl,fuzz=fuzz, dir=dir)
+                # We pass kwargs here to allow special arguments if needed by the payload generator.
+                ret.data = mx_type.gen(transition=transition, channel=channel_to_ctrl,fuzz=fuzz, dir=dir, **kwargs)
             ret.length = len(ret.data)
             return bytes(ret)
         
@@ -117,7 +124,7 @@ class UIH(RFCOMM):
             ret.length = gen_param(0b01111111, 1, (0b00000000, 0b01111111))
             return bytes(ret)
         
-
+        # [4] Default case (non-transition, non-fuzz)
         ret.addr = 0b00000001
         ret.addr |= 1 << 1 # C/R
         ret.addr |= 0 << 2 # Direction
@@ -126,6 +133,7 @@ class UIH(RFCOMM):
         if mx_type is None:
             ret.data = random.choice(MX_TYPE).gen()
         else:
-            ret.data = mx_type.gen(channel=channel_to_ctrl, fuzz=fuzz)
+            # We also pass kwargs here. This is the path taken by tc_BV_21_C.
+            ret.data = mx_type.gen(channel=channel_to_ctrl, fuzz=fuzz, **kwargs)
         ret.length = len(ret.data)
         return bytes(ret)

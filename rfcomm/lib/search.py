@@ -15,18 +15,25 @@ def bluetooth_services_and_protocols_search(bt_addr, test_info):
         print(colored(f"[+] Found {len(services)} profile(s) in the device", "yellow"))
         print("  {:<4} {:<30} {:<15} {:<15} {:<15}".format("[#]", "[Service Name]", "[Protocol]", "[Port (Ch.)]", "[ID]"))
         for i, serv in enumerate(services):
+            protocol = serv.get("protocol")
+            if protocol is None:
+                protocol = "Unknown"
+
+            port = serv.get("port")
+            if port is None:
+                port = "N/A"
+            else:
+                port = str(port)
+
             profile_id = "Unknown"
-            # pprint(serv)
-            if len(serv["profiles"]) > 0:
+            if len(serv["profiles"]) > 0 and serv["profiles"][0][0] is not None:
                 profile_id = f"0x{serv['profiles'][0][0]}"
-            
-            name = serv.get("name", "Unknown")
+
+            name = serv.get("name")
             if name is None:
                 name = "Unknown"
             else:
                 name = name[:30]
-            protocol = serv.get("protocol", "Unknown")
-            port = str(serv.get("port", "N/A"))
 
             print("  {:<4} {:<30} {:<15} {:<15} {:<15}".format(
                 f"{i:02d}.", name, protocol, port, profile_id

@@ -6,7 +6,7 @@ from collections import OrderedDict
 from datetime import date, datetime
 from modules.logger import *
 from modules.construct_sm import *
-from modules.pairing import *
+from modules.testsuite import *
 from lib import *
 
 # Current time

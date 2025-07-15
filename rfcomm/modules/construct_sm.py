@@ -1,102 +1,60 @@
-#from modules import *
-from .pairing import *
-from .mutation_new import *
+"""
+construct_sm.py
+
+Constructs a RFCOMM channel-specific state machine for a target Bluetooth device,
+according to the Bluetooth SIG RFCOMM Test Suite (TS) procedures.
+
+Uses state constants, frame/command definitions from state.py,
+and message sequence logic from testsuite.py.
+Supports optional graph visualization of the resulting state machine.
+"""
+
+from lib.btpkt import FRAME_PKT, inter_recv
+from lib.state import *  # 상태 상수 및 프레임/커맨드
 from collections import defaultdict
+from termcolor import colored
 import time
 import copy
-import os
+import os, sys
 from transitions.extensions import GraphMachine
 
-VISUALIZE = 0
+VISUALIZE = 1
 """
-Flag value to print out base, adaptive state machine.\n
-0 -> disable\n
+Flag value to print out base, adaptive state machine.
+0 -> disable
 1 -> enable
 
-if enabled, 
-`base_sm.png`, `expanded_sm.png` is came out
+If enabled, `base_sm.png`, `expanded_sm.png` are generated.
 """
 
 tmp_pkt = None
 """
-tmp variable to store sended frame.
+Temporary variable to store the last sent frame for debugging.
 """
-
 
 class Visualize:
     """
-    Rapper class of `GraphMachine`.\n
-
-    Parameters
-    ----------
-     -
-    
-    Attributes
-    ----------
-     self.m : `GraphMachine` 
-
-    Methods
-    ----------
-     - `.add_state("state name")`
-     - `.add_tr("transition name")`
+    Wrapper class for `GraphMachine` to visualize the state machine.
     """
     def __init__(self) -> None:
         self.m = GraphMachine(model=self, graph_engine="pygraphviz", 
-            states=["closed_state"],
-            initial= "closed_state"
+            states=[state2str(STATE_INITIATED)],
+            initial=state2str(STATE_INITIATED)
         )
 
     def add_state(self, state):
-        """
-        Add state in the `GraphMachine`
-
-        Parameters
-        ----------
-         - state : [string] state name
-
-        Raises
-        ----------
-         - 
-
-        Returns
-        ----------
-         -
-        """
+        """Add a state node to the graph."""
         self.m.add_state(state)
 
     def add_tr(self, src, dst, frame):
-        """
-        Add transition in the `GraphMachine`
-
-        Parameters
-        ----------
-         - src : [string] source state 
-         - dst : [string] destination state
-         - frame : [string] frame name(means transition)
-
-        Raises
-        ----------
-         - 
-
-        Returns
-        ----------
-         -
-        """
+        """Add a transition edge to the graph."""
         self.m.add_transition(frame, src, dst)
 
 class SMTraverseError(Exception):
     """
-    Error for state transition violation\n
+    Error for state transition violation.
 
-    This error is raised when base state transition is not performed.\n
-
-    Parameters
-    ----------
-     -
-    
-    Attributes
-    ----------
-     self.msg : [string] error message
+    This error is raised when a base state transition does not proceed as expected.
     """
     def __init__(self, msg):
         self.msg = msg
@@ -106,228 +64,33 @@ class SMTraverseError(Exception):
 
 vis = Visualize()
 """
-Visualize class variable for drawing state machine.
+Global Visualize instance for graph construction.
 """
 
 hidden_state_path = []
 """
-[List of tuple] list for storing new(hidden) state path.\n
-
-Note
---------
- - `hidden_state_path[i][0]` : transition function for source state.
- - `hidden_state_path[i][1]` : [bytes] frame for transition to new state.
- - transition function is defined in `modules.pairing`
-
-See also
----------
- - `modules.construct_sm.expand_sm`
- - `modules.mutation_new.new_state_fuzzing`
+[List of tuple] - stores newly discovered (hidden) state transitions.
+Format:
+    - [0]: function for transition (see testsuite.py)
+    - [1]: bytes of the frame that caused the transition
 """
 
 def delete_paired_dev(target_addr):
     """
-    Not used
+    Utility: Removes a Bluetooth device from the paired list (not used in main logic).
     """
     os.system(f"bluetoothctl disconnect {target_addr}")
     os.system(f"bluetoothctl remove {target_addr}")
 
-def state2str(state):
-    """
-        Translate state code to string
-
-        Parameters
-        ----------
-         - state : [int] State code defined in `modules.pairing`
-
-        Raises
-        ----------
-         - 
-
-        Returns
-        ----------
-         - [string] Name of each state
-    """
-    if state == CLOSED:
-        return "closed_state"
-    elif state == OPENED_CTRL_CH:
-        return "opened_ctrl_channel_state"
-    elif state == CLOSED_NORMAL_CH:
-        return "closed normal ch"
-    elif state == OPENED_NORMAL_CH:
-        return "opened_normal_channel_state"
-    elif state == OPENED_NORMAL_CH_WITH_MSC:
-        return "opened normal channel(after msc)"
-    else:
-        return f"new state{state - 4}"
-
-def frame2str(frame):
-    """
-        Translate frame to string
-
-        Parameters
-        ----------
-         - frame : RFCOMM frame defined in `layer.rfcomm.types`
-
-        Raises
-        ----------
-         - 
-
-        Returns
-        ----------
-         - [string] Name of each frame
-    """
-    return frame.name()
-
-
-
-def construct_sm(target_addr, channel):
-    """
-    Construct base state machine for target device.\n
-
-    Parameters
-    ----------
-     - target_addr : [string] Mac address for target device
-     - channel : [int] target profile number (DLCI)
-
-    Raises
-    ----------
-     - 
-
-    Returns
-    ----------
-     - [dictionary] base state machine
-
-    Reference
-    ----------
-    Bluetoooth SIG (2024) RFCOMM Bluetooth Test Suite
-    """
-
-    ret = defaultdict(dict)
-    try:
-        # [1] Test RFCOMM initial state (CLOSED state)
-        sock = closed(target_addr)
-        if sock:
-            ret[CTRL_CHANNEL][CLOSED] = [SABM]
-            sock.close()
-
-        time.sleep(5)
-
-        # [2] test opening controle channel(DLCI=0)
-        # See RFCOMM/DEVA/RFC/BV-01-C in Test suit
-        sock = opened_ctrl_ch(target_addr)
-        if sock:
-
-            vis.add_state(state2str(OPENED_CTRL_CH))
-            vis.add_tr(state2str(CLOSED), state2str(OPENED_CTRL_CH), frame2str(SABM))
-            vis.add_tr(state2str(OPENED_CTRL_CH), state2str(CLOSED), frame2str(DISC))
-
-            ret[CTRL_CHANNEL][OPENED_CTRL_CH] = [DISC, PN]
-            sock.close()
-
-        time.sleep(5)
-
-        # [3] test PN negotiation is possible
-        # See RFCOMM/DEVA/RFC/BV-05-C in Test suit
-        sock = closed_normal_ch(target_addr, channel)
-        time.sleep(5)
-        if sock:
-            vis.add_state(state2str(CLOSED_NORMAL_CH))
-            vis.add_tr(state2str(OPENED_CTRL_CH), state2str(CLOSED_NORMAL_CH), frame2str(PN))
-
-        # [4] test opening DLCI for target profile.
-        # See RFCOMM/DEVA/RFC/BV-05-C in Test suit
-            ret[channel][CLOSED_NORMAL_CH] = [SABM]
-            if establish_dlci(sock, channel):
-
-                vis.add_state(state2str(OPENED_NORMAL_CH))
-                vis.add_tr( state2str(CLOSED_NORMAL_CH),state2str(OPENED_NORMAL_CH), frame2str(SABM))
-                vis.add_tr(state2str(OPENED_NORMAL_CH), state2str(CLOSED_NORMAL_CH), frame2str(DISC))
-
-                ret[channel][OPENED_NORMAL_CH] = [DISC, MSC]
-            sock.close()
-
-        time.sleep(5)
-
-        # [5] test MSC exchange.
-        # See RFCOMM/DEVA-DEVB/RFC/BV-22-C in Test suit
-        sock, _ = open_normal_ch_with_msc(target_addr, channel)
-        if sock:
-
-            vis.add_state(state2str(OPENED_NORMAL_CH_WITH_MSC))
-            vis.add_tr(state2str(OPENED_NORMAL_CH_WITH_MSC),state2str(CLOSED_NORMAL_CH), frame2str(DISC))
-            vis.add_tr(state2str(OPENED_NORMAL_CH), state2str(OPENED_NORMAL_CH_WITH_MSC), frame2str(MSC))
-            vis.add_tr(state2str(OPENED_NORMAL_CH_WITH_MSC), state2str(OPENED_NORMAL_CH_WITH_MSC), frame2str(DATA))
-
-            ret[channel][OPENED_NORMAL_CH_WITH_MSC] = [DATA, DISC]
-            sock.close()
-
-        time.sleep(5)
-
-        # [6] Test if another DLCI opening request is recved.
-        sock, new_dlci = open_new_chan(target_addr, channel)
-        time.sleep(5)
-        if sock:
-            vis.add_state(state2str(CLOSED_NORMAL_CH)+str(new_dlci>>1))
-            vis.add_tr(state2str(OPENED_CTRL_CH), state2str(CLOSED_NORMAL_CH)+str(new_dlci>>1), frame2str(PN))
-
-            ret[new_dlci>>1][CLOSED_NORMAL_CH] = [SABM]
-
-
-
-        # [7] test opening DLCI for target profile.
-        # See RFCOMM/DEVB/RFC/BV-06-C in Test suit
-            sock = establish_new_dlci(sock, new_dlci)
-            time.sleep(5)
-            if sock:
-                vis.add_state(state2str(OPENED_NORMAL_CH)+str(new_dlci>>1))
-                vis.add_tr(state2str(CLOSED_NORMAL_CH)+str(new_dlci>>1),state2str(OPENED_NORMAL_CH)+str(new_dlci>>1), frame2str(SABM))
-                vis.add_tr(state2str(OPENED_NORMAL_CH)+str(new_dlci>>1), state2str(CLOSED_NORMAL_CH)+str(new_dlci>>1), frame2str(DISC))
-                ret[new_dlci>>1][OPENED_NORMAL_CH] = [DISC, MSC]
-
-
-
-        # [8] test MSC exchange.
-        # See RFCOMM/DEVA-DEVB/RFC/BV-22-C in Test suit
-            sock, msc = new_chan_msc(sock, new_dlci>>1, new_dlci&0b1)
-            if msc:
-                vis.add_state(state2str(OPENED_NORMAL_CH_WITH_MSC)+str(new_dlci>>1))
-                vis.add_tr(state2str(OPENED_NORMAL_CH_WITH_MSC)+str(new_dlci>>1),state2str(CLOSED_NORMAL_CH)+str(new_dlci>>1), frame2str(DISC))
-                vis.add_tr(state2str(OPENED_NORMAL_CH)+str(new_dlci>>1), state2str(OPENED_NORMAL_CH_WITH_MSC)+str(new_dlci>>1), frame2str(MSC))
-                vis.add_tr(state2str(OPENED_NORMAL_CH_WITH_MSC)+str(new_dlci>>1), state2str(OPENED_NORMAL_CH_WITH_MSC)+str(new_dlci>>1), frame2str(DATA))
-                ret[new_dlci>>1][OPENED_NORMAL_CH_WITH_MSC] = [DATA, DISC]
-            sock.close()
-
-        time.sleep(5)
-    except:
-        pass
-
-    # [9] print out base state machine
-    pprint(print_sm(ret))
-
-    # [10] print out visualized base state machine
-    if VISUALIZE:
-        vis.get_graph().draw("base_sm.png", prog='dot')
-    
-    return ret
-
-
 def print_sm(sm):
     """
-    Change state, frame in state machine into string.
+    Converts state and frame objects in the state machine to strings for pretty-printing.
 
-    Parameters
-    ----------
-     - sm : state machine
+    Args:
+        sm (dict): state machine
 
-    Raises
-    ----------
-     - 
-
-    Returns
-    ----------
-     - [dictionary] state machine(printable)
-
+    Returns:
+        dict: printable state machine structure
     """
     ret = {}
     for ch in sm:
@@ -336,7 +99,217 @@ def print_sm(sm):
             per_ch_sm[state2str(state)] = [f.name() for f in sm[ch][state]]
         ret[f"channel{ch}"] = per_ch_sm
     return ret
-    
+
+def construct_sm(target_addr, dlci, VISUALIZE=False, vis=None):
+    """
+    Dynamically probe the peer's RFCOMM baseline state machine by running test suites (tc_*) in Control and DLC phases.
+    Each tc_ function attempts a defined transition, and the observed/confirmed state is recorded in state_machine.
+    Args:
+        target_addr (str): MAC address of the target device
+        dlci (int): Target DLCI
+        VISUALIZE (bool): Whether to render visualization
+        vis: Visualization engine (if any)
+    Returns:
+        dict: Inferred state machine (per channel, per state, with allowed frames)
+    """
+    from collections import defaultdict
+    from modules.testsuite import (
+        tc_BV_01_C, tc_BV_05_C, tc_BV_04_C, tc_BV_07_C,
+        tc_BV_11_C, tc_BV_14_C, tc_BV_17_C, tc_BV_21_C, tc_BV_25_C
+    )
+
+    state_machine = defaultdict(dict)
+    sock = None
+    try:
+        # 1. Session open (BV-01-C)
+        print(colored("[TC] BV-01-C: Session open", "cyan"), end=" ")
+        sock = tc_BV_01_C(target_addr)
+        if not sock:
+            print(colored("[Fail]", "red"))
+            return None
+        print(colored("[OK]", "green"))
+        state_machine[CTRL_CHANNEL][STATE_ESTABLISHED_CONTROL] = [PN, TEST, DISC]
+        if VISUALIZE and vis:
+            vis.add_state(state2str(STATE_ESTABLISHED_CONTROL))
+        time.sleep(0.5)
+
+        # 2. Control phase testcases (loop)
+        print(colored("[TC] BV-11-C: TEST command", "cyan"), end=" ")
+        ok = tc_BV_11_C(sock)
+        print(colored("[OK]", "green") if ok else colored("[Fail]", "red"))
+        time.sleep(0.5)
+
+        print(colored("[TC] BV-25-C: NSC (unsupported command)", "cyan"), end=" ")
+        ok = tc_BV_25_C(sock)
+        print(colored("[OK]", "green") if ok else colored("[Fail]", "red"))
+        time.sleep(0.5)
+        # ... (더 많은 컨트롤 채널 기반 TC가 있으면 여기에 확장) ...
+
+        # 3. DLCI open (BV-05-C)
+        print(colored(f"[TC] BV-05-C: Open DLCI={dlci}", "cyan"), end=" ")
+        ok = tc_BV_05_C(sock, dlci)
+        if not ok:
+            print(colored("[Fail]", "red"))
+            sock.close()
+            return None
+        print(colored("[OK]", "green"))
+        state_machine[dlci][STATE_DLC_OPEN] = [RPN, TEST, DATA, MSC, DISC]
+        if VISUALIZE and vis:
+            vis.add_state(state2str(STATE_DLC_OPEN))
+            vis.add_tr(state2str(STATE_ESTABLISHED_CONTROL), state2str(STATE_DLC_OPEN), "SABM")
+
+        # 4. DLC phase testcases (loop, all performed on open DLCI)
+        time.sleep(0.5)
+        print(colored(f"[TC] BV-14-C: RLS command (DLCI={dlci})", "cyan"), end=" ")
+        ok = tc_BV_14_C(sock, dlci)
+        print(colored("[OK]", "green") if ok else colored("[Fail]", "red"))
+
+        time.sleep(0.5)
+        print(colored(f"[TC] BV-17-C: RPN command (DLCI={dlci})", "cyan"), end=" ")
+        ok = tc_BV_17_C(sock, dlci)
+        print(colored("[OK]", "green") if ok else colored("[Fail]", "red"))
+
+        time.sleep(0.5)
+        print(colored(f"[TC] BV-21-C: Credit-based flow (DLCI={dlci})", "cyan"), end=" ")
+        ok = tc_BV_21_C(sock, dlci)
+        print(colored("[OK]", "green") if ok else colored("[Fail]", "red"))
+
+        # ... (더 많은 DLCI 기반 TC가 있으면 여기에 확장) ...
+
+        # 5. DLCI close
+        print(colored(f"[TC] BV-07-C: Close DLCI={dlci}", "cyan"), end=" ")
+        ok = tc_BV_07_C(sock, dlci)
+        print(colored("[OK]", "green") if ok else colored("[Fail]", "red"))
+
+        # 6. Session shutdown
+        print(colored("[TC] BV-04-C: Shutdown", "cyan"), end=" ")
+        ok = tc_BV_04_C(sock)
+        if ok:
+            print(colored("[OK]", "green"))
+            state_machine[CTRL_CHANNEL][STATE_INITIATED] = [SABM]
+            if VISUALIZE and vis:
+                vis.add_state(state2str(STATE_INITIATED))
+                vis.add_tr(state2str(STATE_DLC_OPEN), state2str(STATE_INITIATED), "DISC")
+        else:
+            print(colored("[Fail]", "red"))
+
+    except Exception as e:
+        print(f"[-] construct_sm: {e}")
+        import traceback
+        traceback.print_exc()
+        print(state_machine)
+        if sock:
+            sock.close()
+        return None
+    if sock:
+        sock.close()
+
+    print(colored("\n[Result] Inferred State Machine:", "cyan"))
+    from pprint import pprint
+    pprint(dict(state_machine))
+    return state_machine
+
+
+# def construct_sm(target_addr, dlci):
+#     """
+#     Constructs a DLCI-specific RFCOMM state machine for the given target,
+#     following the Bluetooth SIG RFCOMM Test Suite (TS).
+
+#     Args:
+#         target_addr (str): MAC address of the target device
+#         dlci (int): target profile DLCI (channel number > 0)
+
+#     Returns:
+#         dict: state machine structure
+#     """
+
+#     # Initialize state machine as a nested dict: {channel: {state: [allowed_frames]}}
+#     state_machine = defaultdict(dict)
+#     try:
+#         # --- 1. L2CAP session only (initial state) ---
+#         print(colored("(1/8) L2CAP connection established"), end="", flush=True)
+#         sock = l2cap_establish(target_addr)
+#         if sock:
+#             print(colored(" [Success]", "green"))
+#             state_machine[CTRL_CHANNEL][STATE_L2CAP_ESTABLISHED] = [SABM]
+#             if VISUALIZE:
+#                 vis.add_state(state2str(STATE_L2CAP_ESTABLISHED))
+#             sock.close()
+            
+#         time.sleep(3)
+
+#         # --- 2. Control session (DLCI=0) ---
+#         print(colored("(2/8) Control channel session (DLCI=0)"), end="", flush=True)
+#         sock = ctrl_session(target_addr)
+#         if sock:
+#             print(colored(" [Success]", "green"))
+#             state_machine[CTRL_CHANNEL][STATE_CTRL_SESSION] = [DISC, PN]
+#             if VISUALIZE:
+#                 vis.add_state(state2str(STATE_CTRL_SESSION))
+#                 vis.add_tr(state2str(STATE_L2CAP_ESTABLISHED), state2str(STATE_CTRL_SESSION), "SABM")
+#             sock.close()
+#         else:
+#             print(colored(" [Fail]", "red"))
+#         time.sleep(3)
+
+#         # --- 3. DLCI=n parameter negotiation (PN) ---
+#         print(colored(f"(3/8) DLCI={dlci} parameter negotiation (PN exchange)"), end="", flush=True)
+#         sock = negotiate_dlc_params(target_addr, dlci)
+#         if sock:
+#             print(colored(" [Success]", "green"))
+#             state_machine[dlci][STATE_DLC_PARAM_NEGOTIATED] = [SABM]
+#             if VISUALIZE:
+#                 vis.add_state(state2str(STATE_DLC_PARAM_NEGOTIATED))
+#                 vis.add_tr(state2str(STATE_CTRL_SESSION), state2str(STATE_DLC_PARAM_NEGOTIATED), "PN")
+#         else:
+#             print(colored(" [Fail]", "red"))
+#         time.sleep(0.5)
+
+#         # --- 4. DLCI=n session establish (SABM/UA) ---
+#         print(colored(f"(4/8) DLCI={dlci} session establishment (SABM/UA)"), end="", flush=True)
+#         if sock:
+#             sock2 = initiate_dlc(sock, dlci)
+#             if sock2:
+#                 print(colored(" [Success]", "green"))
+#                 state_machine[dlci][STATE_DLC_ESTABLISHED] = [DISC, MSC]
+#                 if VISUALIZE:
+#                     vis.add_state(state2str(STATE_DLC_ESTABLISHED))
+#                     vis.add_tr(state2str(STATE_DLC_PARAM_NEGOTIATED), state2str(STATE_DLC_ESTABLISHED), "SABM")
+#                 sock2.close()
+
+#         # --- 5. DLCI=n data session ready (MSC exchanged) ---
+#         print(colored(f"(5/8) DLCI={dlci} data session ready (MSC exchanged)"), end="", flush=True)
+#         sock, msc_ok = open_data_session(target_addr, dlci)
+#         if sock:
+#             print(colored(" [Success]", "green"))
+#             state_machine[dlci][STATE_DATA_SESSION_READY] = [DATA, DISC]
+#             if VISUALIZE:
+#                 vis.add_state(state2str(STATE_DATA_SESSION_READY))
+#                 vis.add_tr(state2str(STATE_DLC_ESTABLISHED), state2str(STATE_DATA_SESSION_READY), "MSC")
+#             sock.close()
+#         time.sleep(3)
+
+#         # ---- (Optional: Advanced multi-DLCI, test response states, etc.) ----
+#         # TODO: handle multi-DLCI, unsolicited PN from remote, etc.
+
+#     except Exception as e:
+#         print(f"[-] construct_sm: {e}")
+#         # Optionally print state_machine for debugging
+#         print(print_sm(state_machine))
+#         if VISUALIZE:
+#             vis.get_graph().draw("base_sm.png", prog='dot')
+#         return None
+
+#     # --- Pretty-print and visualize the base state machine ---
+#     print(colored("\nBase State Machine:", "cyan"))
+#     from pprint import pprint
+#     pprint(print_sm(state_machine))
+
+#     if VISUALIZE:
+#         vis.get_graph().draw("base_sm.png", prog='dot')
+
+#     return state_machine
+
 def recv_pkt(sock):
     """
     Receive frame from socket

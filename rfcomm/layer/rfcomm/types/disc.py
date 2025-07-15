@@ -75,9 +75,9 @@ class DISC(RFCOMM):
         # [2] when transition, initialize DISC frame with information for transition
         if transition:
             ret.addr = 0b00000001
-            ret.addr |= 1 << 1 # C/R
-            ret.addr |= 0 << 2 # Direction\
-            ret.addr |= channel << 3
+            ret.addr |= 1 << 1          # C/R bit set to 1 (Command)
+            ret.addr |= 0 << 2          # Direction bit = 0
+            ret.addr |= channel << 3    # Set DLCI bits
             ret.control = RFCOMM_CONTROL.RC_CONTROL_DISC
             ret.length = 0
             return bytes(ret)
@@ -90,9 +90,9 @@ class DISC(RFCOMM):
             return bytes(ret)
 
         ret.addr = 0b00000001
-        ret.addr |= 0 << 1 # C/R
-        ret.addr |= dir << 2 # Direction
-        ret.addr |= channel << 3
+        ret.addr |= 0 << 1              # C/R bit set to 0 (Response)
+        ret.addr |= dir << 2            # Direction bit set from parameter
+        ret.addr |= channel << 3        # Set DLCI bits
         ret.control = RFCOMM_CONTROL.RC_CONTROL_DISC
         ret.length = 0
         return bytes(ret)
