@@ -31,8 +31,8 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 | BV-07-C | Close DLC (IUT)          | Multiplexed DLC → Control Mgmt                     | tc_BV_07_C       | O        | DEVA scenario           |
 | BV-08-C | Close DLC (LT)           | Multiplexed DLC → Control Mgmt                     | tc_BV_08_C       | X        | LT DISC; error evt      |
 | BV-11-C | TEST command (bi-dir)    | Control Mgmt                                       | tc_BV_11_C       | O        | Both directions         |
-| BV-13-C | RLS (parity error)             | Multiplexed DLC                                    | tc_BV_13_C       | O        | Both directions         |
-| BV-14-C | RLS (missing stop-bit)               | Multiplexed DLC                                    | tc_BV_14_C       | O        | Both directions         |
+| BV-13-C | RLS (bi-dir)             | Multiplexed DLC                                    | tc_BV_13_C       | O        | Both directions         |
+| BV-14-C | RLS by IUT               | Multiplexed DLC                                    | tc_BV_14_C       | O        | Both directions         |
 | BV-15-C | PN negotiation           | Control Mgmt                                       | tc_BV_15_C       | O        | Both directions         |
 | BV-17-C | RPN negotiation          | Multiplexed DLC                                    | tc_BV_17_C       | O        | Both directions         |
 | BV-19-C | RPN by IUT               | Multiplexed DLC                                    | tc_BV_19_C       | O        | Both directions         |
@@ -43,7 +43,7 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 ---
 ## 3. Test Suite ↔ Function Mapping (FSM State/Event Sequence)
 <details>
-<summary><b>BV-01-C — tc_BV_01_C</b> [DONE]</summary>
+<summary><b>BV-01-C — tc_BV_01_C</b></summary>
 
 - **Initiated**  
   - *(Send SABM)→*
@@ -54,7 +54,7 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 </details>
 
 <details>
-<summary><b>BV-04-C — tc_BV_04_C</b> [DONE]</summary>
+<summary><b>BV-04-C — tc_BV_04_C</b></summary>
 
 - **DLC Open (DLCI≠0)**
   - *(Send DISC)→*
@@ -69,7 +69,7 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 </details>
 
 <details>
-<summary><b>BV-05-C — tc_BV_05_C</b> [DONE]</summary>
+<summary><b>BV-05-C — tc_BV_05_C</b></summary>
 
 - **Established_Control**  
   - *(Send PN)→*
@@ -84,7 +84,7 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 </details>
 
 <details>
-<summary><b>BV-07-C — tc_BV_07_C</b> [DONE]</summary>
+<summary><b>BV-07-C — tc_BV_07_C</b></summary>
 
 - **DLC Open (DLCI≠0)**  
   - *(Send DISC)→*
@@ -95,7 +95,7 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 </details>
 
 <details>
-<summary><b>BV-11-C — tc_BV_11_C</b> [DONE]</summary>
+<summary><b>BV-11-C — tc_BV_11_C</b></summary>
 
 - **Established_Control**  
   - *(Send TEST)→*
@@ -106,7 +106,7 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 </details>
 
 <details>
-<summary><b>BV-13-C — tc_BV_13_C</b> [DOING]</summary>
+<summary><b>BV-13-C — tc_BV_13_C</b></summary>
 
 - **DLC Open (DLCI≠0)**  
   - *(Send or Recv RLS)→*
@@ -115,7 +115,7 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 </details>
 
 <details>
-<summary><b>BV-14-C — tc_BV_14_C</b> [MODIFY]</summary>
+<summary><b>BV-14-C — tc_BV_14_C</b></summary>
 
 - **DLC Open (DLCI≠0)**  
   - *(Send or Recv RLS)→*
@@ -124,7 +124,7 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 </details>
 
 <details>
-<summary><b>BV-15-C — tc_BV_15_C</b> [UNDONE]</summary>
+<summary><b>BV-15-C — tc_BV_15_C</b></summary>
 
 - **Established_Control**  
   - *(Send PN)→*
@@ -135,7 +135,7 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 </details>
 
 <details>
-<summary><b>BV-17-C — tc_BV_17_C</b> [DONE]</summary>
+<summary><b>BV-17-C — tc_BV_17_C</b></summary>
 
 - **DLC Open (DLCI≠0)**  
   - *(Send RPN)→*
@@ -146,7 +146,7 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 </details>
 
 <details>
-<summary><b>BV-19-C — tc_BV_19_C</b> [UNDONE]</summary>
+<summary><b>BV-19-C — tc_BV_19_C</b></summary>
 
 - **DLC Open (DLCI≠0)**  
   - *(Send RPN)→*
@@ -157,7 +157,7 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 </details>
 
 <details>
-<summary><b>BV-21-C — tc_BV_21_C</b> [MODIFY]</summary>
+<summary><b>BV-21-C — tc_BV_21_C</b></summary>
 
 - **DLC Open (DLCI≠0)**  
   - *(Send MSC)→*
@@ -172,7 +172,7 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 </details>
 
 <details>
-<summary><b>BV-22-C — tc_BV_22_C</b> [UNDONE]</summary>
+<summary><b>BV-22-C — tc_BV_22_C</b></summary>
 
 - **DLC Open (DLCI≠0)**  
   - *(Send MSC)→*
@@ -185,7 +185,7 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 </details>
 
 <details>
-<summary><b>BV-25-C — tc_BV_25_C</b> [DONE]</summary>
+<summary><b>BV-25-C — tc_BV_25_C</b></summary>
 
 - **Established_Control**  
   - *(Send Unknown Cmd)→*

@@ -1,8 +1,6 @@
 import bluetooth
 from scapy.packet import Packet
 import random
-
-# for time out recv
 from functools import wraps
 import errno
 import os
@@ -12,15 +10,19 @@ import time
 from layer.rfcomm.const import RFCOMM_CONTROL, MX_TYPE
 
 RFCOMM_EA = 1
-
 MTU = 0xffff
 
 def _pf(const):
+    # This function is correct. It sets the Poll/Final bit.
     return const | (1 << 4)
 
-# Mask to ignore C/R bit (bit 1)
 def mx_type_mask(x):
+    # This correctly ignores the C/R bit for multiplexer commands.
     return x & 0b11111101
+
+def frame_type_mask(x):
+    # This ignores the Poll/Final bit (bit 4) for standard RFCOMM frames.
+    return x & 0b11101111
 
 class FRAME_PKT:
     def __init__(self, pkt):
@@ -28,74 +30,72 @@ class FRAME_PKT:
         self.address = ""
         self.control = ""
         self.length = ""
-        self.frame_check_seq = ""
-        self.mx_type = None      # For UIH subcommand type
-    
-    # def parse_pkt(self):
-    #     self.address = self.pkt[0]
-    #     self.control = self.pkt[1]
-    #     if self.control == RFCOMM_CONTROL.RC_CONTROL_DISC or _pf(RFCOMM_CONTROL.RC_CONTROL_DISC) == self.control:
-    #         return 'DISC'
-    #     elif self.control == RFCOMM_CONTROL.RC_CONTROL_DM or _pf(RFCOMM_CONTROL.RC_CONTROL_DM) == self.control:
-    #         return 'DM'
-    #     elif self.control == RFCOMM_CONTROL.RC_CONTROL_SABM or _pf(RFCOMM_CONTROL.RC_CONTROL_SABM) == self.control:
-    #         return 'SABM'
-    #     elif self.control == RFCOMM_CONTROL.RC_CONTROL_UIH or _pf(RFCOMM_CONTROL.RC_CONTROL_UIH) == self.control:
-    #         return 'UIH' 
-    #     elif self.control  == RFCOMM_CONTROL.RC_CONTROL_UA or _pf(RFCOMM_CONTROL.RC_CONTROL_UA) == self.control:
-    #         return 'UA'
-    #     else:
-    #         return None
+        self.payload = b''
+        self.payload_len = 0
+        self.credit = 0  # <-- NEW attribute to store credits
 
     def parse_pkt(self):
-        if not self.pkt or len(self.pkt) < 3:
+        """
+        A robust parser that identifies UIH frames carrying credits.
+        """
+        if not self.pkt or len(self.pkt) < 2:
             return None
+        
         self.address = self.pkt[0]
         self.control = self.pkt[1]
-        # Handle top-level RFCOMM frames
-        if self.control == RFCOMM_CONTROL.RC_CONTROL_DISC or _pf(RFCOMM_CONTROL.RC_CONTROL_DISC) == self.control:
-            return 'DISC'
-        elif self.control == RFCOMM_CONTROL.RC_CONTROL_DM or _pf(RFCOMM_CONTROL.RC_CONTROL_DM) == self.control:
-            return 'DM'
-        elif self.control == RFCOMM_CONTROL.RC_CONTROL_SABM or _pf(RFCOMM_CONTROL.RC_CONTROL_SABM) == self.control:
+        
+        # Mask the control byte to ignore the P/F bit for standard comparisons.
+        masked_control = frame_type_mask(self.control)
+        
+        if masked_control == frame_type_mask(RFCOMM_CONTROL.RC_CONTROL_SABM):
             return 'SABM'
-        elif self.control == RFCOMM_CONTROL.RC_CONTROL_UA or _pf(RFCOMM_CONTROL.RC_CONTROL_UA) == self.control:
+        elif masked_control == frame_type_mask(RFCOMM_CONTROL.RC_CONTROL_UA):
             return 'UA'
-        elif self.control == RFCOMM_CONTROL.RC_CONTROL_UIH or _pf(RFCOMM_CONTROL.RC_CONTROL_UIH) == self.control:
-            # ---- UIH frame: subcommand parsing ----
-            # [0]: Address, [1]: Control, [2]: Length (EA=1: 1 byte, else 2 bytes)
-            len_val = self.pkt[2]
-            len_bytes = 1 if (len_val & 1) else 2
-            mx_offset = 3 if len_bytes == 1 else 4
-            # Check if UIH payload (subcommand) exists
-            if len(self.pkt) > mx_offset:
-                mx_type = self.pkt[mx_offset]
-                self.mx_type = mx_type
-                # Mask C/R bit for all MX_TYPE comparisons
-                masked_mx = mx_type_mask(mx_type)
-                if masked_mx == mx_type_mask(MX_TYPE.MX_PN):
-                    return 'PN'
-                elif masked_mx == mx_type_mask(MX_TYPE.MX_TEST):
-                    return 'TEST'
-                elif masked_mx == mx_type_mask(MX_TYPE.MX_MSC):
-                    return 'MSC'
-                elif masked_mx == mx_type_mask(MX_TYPE.MX_FCON):
-                    return 'FCON'
-                elif masked_mx == mx_type_mask(MX_TYPE.MX_FCOFF):
-                    return 'FCOFF'
-                elif masked_mx == mx_type_mask(MX_TYPE.MX_RPN):
-                    return 'RPN'
-                elif masked_mx == mx_type_mask(MX_TYPE.MX_RLS):
-                    return 'RLS'
-                elif masked_mx == mx_type_mask(MX_TYPE.MX_NSC):
-                    return 'NSC'
-                else:
-                    return 'UIH'  # Unknown MX_TYPE, just return 'UIH'
-            else:
-                return 'UIH'      # No payload found
-        else:
-            return None
+        elif masked_control == frame_type_mask(RFCOMM_CONTROL.RC_CONTROL_DISC):
+            return 'DISC'
+        elif masked_control == frame_type_mask(RFCOMM_CONTROL.RC_CONTROL_DM):
+            return 'DM'
 
+        # --- NEW LOGIC: Specifically check for UIH with P/F bit first ---
+        # A UIH frame with the P/F bit set is used exclusively for credit-based flow control.
+        elif self.control == _pf(RFCOMM_CONTROL.RC_CONTROL_UIH):
+            # This is a UIH frame carrying credits.
+            # The credit value is the first byte of the information field.
+            info_start_offset = 3
+            if len(self.pkt) > info_start_offset:
+                self.credit = self.pkt[info_start_offset]
+            return 'UIH_CREDIT' # Return a unique type to identify this frame
+
+        # --- EXISTING LOGIC for standard UIH frames ---
+        elif masked_control == frame_type_mask(RFCOMM_CONTROL.RC_CONTROL_UIH):
+            # Standard UIH frame, now parse the inner multiplexer command or data.
+            mx_start_offset = 3
+            if len(self.pkt) > mx_start_offset:
+                self.payload = self.pkt[mx_start_offset:-1] # Multiplexer payload
+                
+                # Check if it's a multiplexer command or just data
+                if len(self.payload) > 1:
+                    self.payload_len = self.payload[1] >> 1
+                    masked_mx = mx_type_mask(self.payload[0])
+
+                    if masked_mx == mx_type_mask(MX_TYPE.MX_PN): return 'PN'
+                    elif masked_mx == mx_type_mask(MX_TYPE.MX_TEST): return 'TEST'
+                    elif masked_mx == mx_type_mask(MX_TYPE.MX_MSC): return 'MSC'
+                    elif masked_mx == mx_type_mask(MX_TYPE.MX_FCON): return 'FCON'
+                    elif masked_mx == mx_type_mask(MX_TYPE.MX_FCOFF): return 'FCOFF'
+                    elif masked_mx == mx_type_mask(MX_TYPE.MX_RPN): return 'RPN'
+                    elif masked_mx == mx_type_mask(MX_TYPE.MX_RLS): return 'RLS'
+                    elif masked_mx == mx_type_mask(MX_TYPE.MX_NSC): return 'NSC'
+                    else: 
+                        # If not a known MX type, it's a simple data frame.
+                        return 'UIH_DATA'
+                else:
+                    # If payload is 1 byte or less, it's likely just data.
+                    return 'UIH_DATA'
+            else:
+                return 'UIH' # UIH with no payload
+        else:
+            return None # Unknown frame type
 
 def timeout(seconds=10, error_message=os.strerror(errno.ETIME)):
     def decorator(func):
@@ -139,13 +139,6 @@ def inter_recv(sock, dur=None):
         finally:
             sock.setblocking(True)
         return result_list, sock
-
-"""
-@timeout(3)
-def inter_recv(sock): # Receive the first response
-    conn_rsp = sock.recv(MTU)
-    return conn_rsp, sock
-"""
 
 def process_rsps(resp_list):
     """

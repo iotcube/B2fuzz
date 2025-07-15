@@ -10,13 +10,16 @@ Supports optional graph visualization of the resulting state machine.
 """
 
 from lib.btpkt import FRAME_PKT, inter_recv
-from lib.state import *  # 상태 상수 및 프레임/커맨드
+from lib.state import * 
 from collections import defaultdict
 from termcolor import colored
 import time
 import copy
 import os, sys
 from transitions.extensions import GraphMachine
+# Import bluetooth to catch specific exceptions
+import bluetooth
+
 
 VISUALIZE = 1
 """
@@ -92,6 +95,8 @@ def print_sm(sm):
     Returns:
         dict: printable state machine structure
     """
+    if sm is None:
+        return {} # Return empty dict if sm is None to prevent crashes
     ret = {}
     for ch in sm:
         per_ch_sm = {}
@@ -100,9 +105,10 @@ def print_sm(sm):
         ret[f"channel{ch}"] = per_ch_sm
     return ret
 
+
 def construct_sm(target_addr, dlci, VISUALIZE=False, vis=None):
     """
-    Dynamically probe the peer's RFCOMM baseline state machine by running test suites (tc_*) in Control and DLC phases.
+    Dynamically probe the peer's RFCOMM baseline state machine by running test suites (tc_*) in sequence.
     Each tc_ function attempts a defined transition, and the observed/confirmed state is recorded in state_machine.
     Args:
         target_addr (str): MAC address of the target device
@@ -112,16 +118,17 @@ def construct_sm(target_addr, dlci, VISUALIZE=False, vis=None):
     Returns:
         dict: Inferred state machine (per channel, per state, with allowed frames)
     """
-    from collections import defaultdict
+    # Import all necessary test cases, including the new BV-13-C
     from modules.testsuite import (
-        tc_BV_01_C, tc_BV_05_C, tc_BV_04_C, tc_BV_07_C,
-        tc_BV_11_C, tc_BV_14_C, tc_BV_17_C, tc_BV_21_C, tc_BV_25_C
-    )
+        tc_BV_01_C, tc_BV_05_C, tc_BV_07_C, 
+        tc_BV_11_C, tc_BV_13_C, tc_BV_14_C, 
+        tc_BV_17_C, tc_BV_19_C, tc_BV_21_C, 
+        tc_BV_22_C, tc_BV_25_C, tc_BV_04_C)
 
     state_machine = defaultdict(dict)
     sock = None
     try:
-        # 1. Session open (BV-01-C)
+        # STEP 1: Start session (BV-01-C)
         print(colored("[TC] BV-01-C: Session open", "cyan"), end=" ")
         sock = tc_BV_01_C(target_addr)
         if not sock:
@@ -131,24 +138,17 @@ def construct_sm(target_addr, dlci, VISUALIZE=False, vis=None):
         state_machine[CTRL_CHANNEL][STATE_ESTABLISHED_CONTROL] = [PN, TEST, DISC]
         if VISUALIZE and vis:
             vis.add_state(state2str(STATE_ESTABLISHED_CONTROL))
-        time.sleep(0.5)
 
-        # 2. Control phase testcases (loop)
-        print(colored("[TC] BV-11-C: TEST command", "cyan"), end=" ")
-        ok = tc_BV_11_C(sock)
-        print(colored("[OK]", "green") if ok else colored("[Fail]", "red"))
-        time.sleep(0.5)
+        # STEP 2: Run tests on control channel (BV-11-C)
+        print(colored("[TC] BV-11-C: TEST Command", "cyan"), end=" ")
+        if tc_BV_11_C(sock):
+            print(colored("[OK]", "green"))
+        else:
+            print(colored("[Fail]", "red"))
 
-        print(colored("[TC] BV-25-C: NSC (unsupported command)", "cyan"), end=" ")
-        ok = tc_BV_25_C(sock)
-        print(colored("[OK]", "green") if ok else colored("[Fail]", "red"))
-        time.sleep(0.5)
-        # ... (더 많은 컨트롤 채널 기반 TC가 있으면 여기에 확장) ...
-
-        # 3. DLCI open (BV-05-C)
+        # STEP 3: Open target DLCI (BV-05-C)
         print(colored(f"[TC] BV-05-C: Open DLCI={dlci}", "cyan"), end=" ")
-        ok = tc_BV_05_C(sock, dlci)
-        if not ok:
+        if not tc_BV_05_C(sock, dlci):
             print(colored("[Fail]", "red"))
             sock.close()
             return None
@@ -158,40 +158,75 @@ def construct_sm(target_addr, dlci, VISUALIZE=False, vis=None):
             vis.add_state(state2str(STATE_DLC_OPEN))
             vis.add_tr(state2str(STATE_ESTABLISHED_CONTROL), state2str(STATE_DLC_OPEN), "SABM")
 
-        # 4. DLC phase testcases (loop, all performed on open DLCI)
-        time.sleep(0.5)
-        print(colored(f"[TC] BV-14-C: RLS command (DLCI={dlci})", "cyan"), end=" ")
-        ok = tc_BV_14_C(sock, dlci)
-        print(colored("[OK]", "green") if ok else colored("[Fail]", "red"))
-
-        time.sleep(0.5)
-        print(colored(f"[TC] BV-17-C: RPN command (DLCI={dlci})", "cyan"), end=" ")
-        ok = tc_BV_17_C(sock, dlci)
-        print(colored("[OK]", "green") if ok else colored("[Fail]", "red"))
-
-        time.sleep(0.5)
-        print(colored(f"[TC] BV-21-C: Credit-based flow (DLCI={dlci})", "cyan"), end=" ")
-        ok = tc_BV_21_C(sock, dlci)
-        print(colored("[OK]", "green") if ok else colored("[Fail]", "red"))
-
-        # ... (더 많은 DLCI 기반 TC가 있으면 여기에 확장) ...
-
-        # 5. DLCI close
-        print(colored(f"[TC] BV-07-C: Close DLCI={dlci}", "cyan"), end=" ")
-        ok = tc_BV_07_C(sock, dlci)
-        print(colored("[OK]", "green") if ok else colored("[Fail]", "red"))
-
-        # 6. Session shutdown
-        print(colored("[TC] BV-04-C: Shutdown", "cyan"), end=" ")
-        ok = tc_BV_04_C(sock)
-        if ok:
+        # STEP 4: Run tests on the open DLCI
+        # ** This is the key change: calling the new tc_BV_13_C **
+        print(colored(f"[TC] BV-13-C: Send RLS on DLCI={dlci}", "cyan"), end=" ")
+        if tc_BV_13_C(sock, dlci):
             print(colored("[OK]", "green"))
-            state_machine[CTRL_CHANNEL][STATE_INITIATED] = [SABM]
-            if VISUALIZE and vis:
-                vis.add_state(state2str(STATE_INITIATED))
-                vis.add_tr(state2str(STATE_DLC_OPEN), state2str(STATE_INITIATED), "DISC")
+            # RLS is a valid command whether or not it was already in the list
         else:
             print(colored("[Fail]", "red"))
+
+        print(colored(f"[TC] BV-14-C: Send RLS (alt status) on DLCI={dlci}", "cyan"), end=" ")
+        if tc_BV_14_C(sock, dlci):
+            print(colored("[OK]", "green"))
+        else:
+            print(colored("[Fail]", "red"))
+
+        print(colored(f"[TC] BV-17-C: Send RPN on DLCI={dlci}", "cyan"), end=" ")
+        if tc_BV_17_C(sock, dlci):
+            print(colored("[OK]", "green"))
+            if RPN not in state_machine[dlci][STATE_DLC_OPEN]:
+                state_machine[dlci][STATE_DLC_OPEN].append(RPN)
+        else:
+            print(colored("[Fail]", "red"))
+        
+        print(colored(f"[TC] BV-19-C: Send RPN (query) on DLCI={dlci}", "cyan"), end=" ")
+        if tc_BV_19_C(sock, dlci):
+            print(colored("[OK]", "green"))
+        else:
+            print(colored("[Fail]", "red"))
+        
+        print(colored(f"[TC] BV-21-C: Credit Flow on DLCI={dlci}", "cyan"), end=" ")
+        if tc_BV_21_C(sock, dlci):
+            print(colored("[OK]", "green"))
+            if FCON not in state_machine[CTRL_CHANNEL][STATE_ESTABLISHED_CONTROL]:
+                state_machine[CTRL_CHANNEL][STATE_ESTABLISHED_CONTROL].append(FCON)
+        else:
+            print(colored("[Fail]", "red"))
+
+        print(colored(f"[TC] BV-22-C: Transfer Information with MSC Handshake on DLCI={dlci}", "cyan"), end=" ")
+        if tc_BV_22_C(sock, dlci):
+            print(colored("[OK]", "green"))
+        else:
+            print(colored("[Fail]", "red"))
+
+        print(colored(f"[TC] BV-25-C: Unsupported Command", "cyan"), end=" ")
+        if tc_BV_25_C(sock):
+            print(colored("[OK]", "green"))
+        else:
+            print(colored("[Fail]", "red"))
+
+        # STEP 5: Close the DLCI (BV-07-C) and handle abrupt disconnection
+        print(colored(f"[TC] BV-07-C: Close DLCI={dlci}", "cyan"), end=" ")
+        try:
+            if tc_BV_07_C(sock, dlci):
+                # If we get here without an exception, the socket is still alive.
+                print(colored("[TC] BV-04-C: Shutdown", "cyan"), end=" ")
+                if tc_BV_04_C(sock, []): # Pass empty list as DLCI is already closed
+                    print(colored("[OK]", "green"))
+                    sock = None # tc_BV_04_C closes the socket
+                else:
+                    print(colored("[Fail]", "red"))
+            else:
+                print(colored("[Fail] BV-07-C reported a failure.", "red"))
+
+        except bluetooth.btcommon.BluetoothError:
+            # This block catches the abrupt disconnection. The session is over.
+            print(colored("\n[Info] Session closed abruptly after DISC on DLCI. This is valid behavior. Ending test run.", "blue"))
+            sock.close() # Ensure socket is closed on our end
+            sock = None
+
 
     except Exception as e:
         print(f"[-] construct_sm: {e}")
@@ -208,107 +243,6 @@ def construct_sm(target_addr, dlci, VISUALIZE=False, vis=None):
     from pprint import pprint
     pprint(dict(state_machine))
     return state_machine
-
-
-# def construct_sm(target_addr, dlci):
-#     """
-#     Constructs a DLCI-specific RFCOMM state machine for the given target,
-#     following the Bluetooth SIG RFCOMM Test Suite (TS).
-
-#     Args:
-#         target_addr (str): MAC address of the target device
-#         dlci (int): target profile DLCI (channel number > 0)
-
-#     Returns:
-#         dict: state machine structure
-#     """
-
-#     # Initialize state machine as a nested dict: {channel: {state: [allowed_frames]}}
-#     state_machine = defaultdict(dict)
-#     try:
-#         # --- 1. L2CAP session only (initial state) ---
-#         print(colored("(1/8) L2CAP connection established"), end="", flush=True)
-#         sock = l2cap_establish(target_addr)
-#         if sock:
-#             print(colored(" [Success]", "green"))
-#             state_machine[CTRL_CHANNEL][STATE_L2CAP_ESTABLISHED] = [SABM]
-#             if VISUALIZE:
-#                 vis.add_state(state2str(STATE_L2CAP_ESTABLISHED))
-#             sock.close()
-            
-#         time.sleep(3)
-
-#         # --- 2. Control session (DLCI=0) ---
-#         print(colored("(2/8) Control channel session (DLCI=0)"), end="", flush=True)
-#         sock = ctrl_session(target_addr)
-#         if sock:
-#             print(colored(" [Success]", "green"))
-#             state_machine[CTRL_CHANNEL][STATE_CTRL_SESSION] = [DISC, PN]
-#             if VISUALIZE:
-#                 vis.add_state(state2str(STATE_CTRL_SESSION))
-#                 vis.add_tr(state2str(STATE_L2CAP_ESTABLISHED), state2str(STATE_CTRL_SESSION), "SABM")
-#             sock.close()
-#         else:
-#             print(colored(" [Fail]", "red"))
-#         time.sleep(3)
-
-#         # --- 3. DLCI=n parameter negotiation (PN) ---
-#         print(colored(f"(3/8) DLCI={dlci} parameter negotiation (PN exchange)"), end="", flush=True)
-#         sock = negotiate_dlc_params(target_addr, dlci)
-#         if sock:
-#             print(colored(" [Success]", "green"))
-#             state_machine[dlci][STATE_DLC_PARAM_NEGOTIATED] = [SABM]
-#             if VISUALIZE:
-#                 vis.add_state(state2str(STATE_DLC_PARAM_NEGOTIATED))
-#                 vis.add_tr(state2str(STATE_CTRL_SESSION), state2str(STATE_DLC_PARAM_NEGOTIATED), "PN")
-#         else:
-#             print(colored(" [Fail]", "red"))
-#         time.sleep(0.5)
-
-#         # --- 4. DLCI=n session establish (SABM/UA) ---
-#         print(colored(f"(4/8) DLCI={dlci} session establishment (SABM/UA)"), end="", flush=True)
-#         if sock:
-#             sock2 = initiate_dlc(sock, dlci)
-#             if sock2:
-#                 print(colored(" [Success]", "green"))
-#                 state_machine[dlci][STATE_DLC_ESTABLISHED] = [DISC, MSC]
-#                 if VISUALIZE:
-#                     vis.add_state(state2str(STATE_DLC_ESTABLISHED))
-#                     vis.add_tr(state2str(STATE_DLC_PARAM_NEGOTIATED), state2str(STATE_DLC_ESTABLISHED), "SABM")
-#                 sock2.close()
-
-#         # --- 5. DLCI=n data session ready (MSC exchanged) ---
-#         print(colored(f"(5/8) DLCI={dlci} data session ready (MSC exchanged)"), end="", flush=True)
-#         sock, msc_ok = open_data_session(target_addr, dlci)
-#         if sock:
-#             print(colored(" [Success]", "green"))
-#             state_machine[dlci][STATE_DATA_SESSION_READY] = [DATA, DISC]
-#             if VISUALIZE:
-#                 vis.add_state(state2str(STATE_DATA_SESSION_READY))
-#                 vis.add_tr(state2str(STATE_DLC_ESTABLISHED), state2str(STATE_DATA_SESSION_READY), "MSC")
-#             sock.close()
-#         time.sleep(3)
-
-#         # ---- (Optional: Advanced multi-DLCI, test response states, etc.) ----
-#         # TODO: handle multi-DLCI, unsolicited PN from remote, etc.
-
-#     except Exception as e:
-#         print(f"[-] construct_sm: {e}")
-#         # Optionally print state_machine for debugging
-#         print(print_sm(state_machine))
-#         if VISUALIZE:
-#             vis.get_graph().draw("base_sm.png", prog='dot')
-#         return None
-
-#     # --- Pretty-print and visualize the base state machine ---
-#     print(colored("\nBase State Machine:", "cyan"))
-#     from pprint import pprint
-#     pprint(print_sm(state_machine))
-
-#     if VISUALIZE:
-#         vis.get_graph().draw("base_sm.png", prog='dot')
-
-#     return state_machine
 
 def recv_pkt(sock):
     """
