@@ -45,153 +45,157 @@ This mapping ensures FSM coverage, traceability, and automated test reporting.
 <details>
 <summary><b>BV-01-C — tc_BV_01_C</b></summary>
 
-- **Initiated**  
+- **Session_Open**  
   - *(Send SABM)→*
 - **Wait_UA (Setup)**  
   - *(Recv UA)→*
-- **Established_Control**
+- **Control_Open (DLCI=0)**
 
 </details>
 
 <details>
 <summary><b>BV-04-C — tc_BV_04_C</b></summary>
 
-- **DLC Open (DLCI≠0)**
+- **DLC_Open (DLCI≠0)**
   - *(Send DISC)→*
 - **Wait_DISC_UA (DLC)**
   - *(Recv UA)→*
-- **Established_Control**
+- **Control_Open (DLCI=0)**
   - *(Send DISC)→*
 - **Wait_DISC_UA (Ctrl)**
   - *(Recv UA)→*
-- **Initiated**
+- **Session_Open**
 
 </details>
 
 <details>
 <summary><b>BV-05-C — tc_BV_05_C</b></summary>
 
-- **Established_Control**  
+- **Control_Open (DLCI=0)**  
   - *(Send PN)→*
-- **Wait_PN_Response**  
+- **Wait_PN**  
   - *(Recv PN)→*
-- **Established_Control**  
+- **Control_Open (DLCI=0)**  
   - *(Send SABM)→*
 - **Wait_UA (Ctrl)**  
   - *(Recv UA)→*
-- **DLC Open (DLCI≠0)**
+- **DLC_Open (DLCI≠0)**
 
 </details>
 
 <details>
 <summary><b>BV-07-C — tc_BV_07_C</b></summary>
 
-- **DLC Open (DLCI≠0)**  
+- **DLC_Open (DLCI≠0)**  
   - *(Send DISC)→*
 - **Wait_DISC_UA (DLC)**  
   - *(Recv UA)→*
-- **Established_Control**
+- **Control_Open (DLCI=0)**
 
 </details>
 
 <details>
 <summary><b>BV-11-C — tc_BV_11_C</b></summary>
 
-- **Established_Control**  
+- **Control_Open (DLCI=0)**  
   - *(Send TEST)→*
-- **Wait_Test_Response**  
+- **Wait_Test**  
   - *(Recv TEST)→*
-- **Established_Control**
+- **Control_Open (DLCI=0)**
 
 </details>
 
 <details>
 <summary><b>BV-13-C — tc_BV_13_C</b></summary>
 
-- **DLC Open (DLCI≠0)**  
-  - *(Send or Recv RLS)→*
-- **DLC Open (DLCI≠0)**
+- **DLC_Open (DLCI≠0)**  
+  - *(Send RLS)→*
+- **Wait_RLS**  
+  - *(Recv RLS)→*
+- **DLC_Open (DLCI≠0)**
 
 </details>
 
 <details>
 <summary><b>BV-14-C — tc_BV_14_C</b></summary>
 
-- **DLC Open (DLCI≠0)**  
-  - *(Send or Recv RLS)→*
-- **DLC Open (DLCI≠0)**
+- **DLC_Open (DLCI≠0)**  
+  - *(Send RLS)→*
+- **Wait_RLS**  
+  - *(Recv RLS)→*
+- **DLC_Open (DLCI≠0)**
 
 </details>
 
 <details>
 <summary><b>BV-15-C — tc_BV_15_C</b></summary>
 
-- **Established_Control**  
+- **Control_Open (DLCI=0)**  
   - *(Send PN)→*
-- **Wait_PN_Response**  
+- **Wait_PN**  
   - *(Recv PN)→*
-- **Established_Control**
+- **Control_Open (DLCI=0)**
 
 </details>
 
 <details>
 <summary><b>BV-17-C — tc_BV_17_C</b></summary>
 
-- **DLC Open (DLCI≠0)**  
+- **DLC_Open (DLCI≠0)**  
   - *(Send RPN)→*
-- **Wait_RPN_Response**  
+- **Wait_RPN**  
   - *(Recv RPN or NSC)→*
-- **DLC Open (DLCI≠0)**
+- **DLC_Open (DLCI≠0)**
 
 </details>
 
 <details>
 <summary><b>BV-19-C — tc_BV_19_C</b></summary>
 
-- **DLC Open (DLCI≠0)**  
+- **DLC_Open (DLCI≠0)**  
   - *(Send RPN)→*
-- **Wait_RPN_Response**  
+- **Wait_RPN**  
   - *(Recv RPN or NSC)→*
-- **DLC Open (DLCI≠0)**
+- **DLC_Open (DLCI≠0)**
 
 </details>
 
 <details>
 <summary><b>BV-21-C — tc_BV_21_C</b></summary>
 
-- **DLC Open (DLCI≠0)**  
+- **DLC_Open (DLCI≠0)**  
   - *(Send MSC)→*
-- **DLC Open (DLCI≠0)**  
+- **Wait_MSC**  
   - *(Recv MSC)→*
-- **DLC Open (DLCI≠0)**  
+- **DLC_Open (DLCI≠0)**  
   - *(Recv UIH(credits))→*
-- **DLC Open (DLCI≠0)**  
+- **Credit_Rcvd**  
   - *(Send UIH(data))→*
-- **DLC Open (DLCI≠0)**
+- **DLC_Open (DLCI≠0)**
 
 </details>
 
 <details>
 <summary><b>BV-22-C — tc_BV_22_C</b></summary>
 
-- **DLC Open (DLCI≠0)**  
+- **DLC_Open (DLCI≠0)**  
   - *(Send MSC)→*
-- **DLC Open (DLCI≠0)**  
+- **Wait_MSC**  
   - *(Recv MSC)→*
-- **DLC Open (DLCI≠0)**  
+- **DLC_Open (DLCI≠0)**  
   - *(Send UIH(data))→*
-- **DLC Open (DLCI≠0)**
+- **DLC_Open (DLCI≠0)**
 
 </details>
 
 <details>
 <summary><b>BV-25-C — tc_BV_25_C</b></summary>
 
-- **Established_Control**  
-  - *(Send Unknown Cmd)→*
-- **Established_Control**  
+- **Control_Open (DLCI=0)**  
+  - *(Send Unsupported Cmd)→*
+- **Wait_NSC**  
   - *(Recv NSC)→*
-- **Established_Control**
+- **Control_Open (DLCI=0)**
 
 </details>
 
