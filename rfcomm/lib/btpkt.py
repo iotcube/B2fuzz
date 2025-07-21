@@ -1,6 +1,5 @@
 import bluetooth
-from scapy.packet import Packet
-import random
+from termcolor import colored
 from functools import wraps
 import errno
 import os
@@ -140,16 +139,106 @@ def inter_recv(sock, dur=None):
             sock.setblocking(True)
         return result_list, sock
 
-def process_rsps(resp_list):
+# def process_rsps(resp_list):
+#     """
+#     Given a list of respS,
+#     returns a list of (resp, res) where res is not None
+#     (res = FRAME_PKT(resp).parse_pkt()).
+#     """
+#     results = []
+#     for resp in resp_list:
+#         frame_pkt = FRAME_PKT(resp)
+#         res = frame_pkt.parse_pkt()
+#         if res is not None:
+#             results.append(res)
+#     return results
+
+
+# Helper function for parsing RLS payload (13_C and 14_C)
+def compare_rls_payload(actual, expected, length=3):
+    return actual[:length] == expected[:length]
+
+def process_rsps(
+    resp_list,
+    required_types=None,
+    optional_types=None,
+    expected_payloads=None,
+    allow_timeout=False
+):
     """
-    Given a list of respS,
-    returns a list of (resp, res) where res is not None
-    (res = FRAME_PKT(resp).parse_pkt()).
+    Validates parsed RFCOMM packets.
+
+    Args:
+        resp_list: List of raw packets.
+        required_types: List of required packet types.
+        optional_types: List of optional packet types.
+        expected_payloads: Dict mapping type to expected value or validator function.
+        allow_timeout: If True, missing responses may be inconclusive.
+
+    Returns:
+        Tuple[int, dict]: (status_code, {pkt_type: pkt_instance})
+            -1: FAIL
+             0: PASS
+             1: INCONCLUSIVE
     """
-    results = []
-    for resp in resp_list:
-        frame_pkt = FRAME_PKT(resp)
-        res = frame_pkt.parse_pkt()
-        if res is not None:
-            results.append(res)
-    return results
+    if not resp_list:
+        if allow_timeout:
+            print(colored(" [Inconclusive] No response received, but timeout is allowed.", "yellow"))
+            return 1, {}
+        else:
+            print(colored(" [Fail] No response received and timeout is not allowed.", "red"))
+            return -1, {}
+
+    result = {}
+    for raw_pkt in resp_list:
+        pkt = FRAME_PKT(raw_pkt)
+        pkt_type = pkt.parse_pkt()
+        if pkt_type is None or pkt_type in result:
+            continue
+        result[pkt_type] = pkt
+
+    # 1. Check for required types
+    if required_types:
+        for rtype in required_types:
+            if rtype not in result:
+                print(colored(f" [Fail] Required packet '{rtype}' not received.", "red"))
+                return -1, result
+            else:
+                print(colored(f" [Pass] Required packet '{rtype}' received.", "green"))
+
+    # 2. Validate payloads (supports lambda/callable for custom validation)
+    if expected_payloads:
+        for pkt_type, expected in expected_payloads.items():
+            if pkt_type not in result:
+                print(colored(f" [Fail] Expected payload for '{pkt_type}' not received.", "red"))
+                return -1, result
+            actual = result[pkt_type].payload
+            if callable(expected):
+                if not expected(actual):
+                    print(colored(f" [Fail] Payload for '{pkt_type}' did not pass the validator.", "red"))
+                    return -1, result
+                else:
+                    print(colored(f" [Pass] Payload for '{pkt_type}' passed custom validator.", "green"))
+            else:
+                if actual != expected:
+                    print(colored(f" [Fail] Payload mismatch in '{pkt_type}'.", "red"))
+                    return -1, result
+                else:
+                    print(colored(f" [Pass] Payload for '{pkt_type}' matched.", "green"))
+
+    # 3. Handle optional types (if no required types given)
+    if not required_types and optional_types:
+        matched = any(t in result for t in optional_types)
+        if matched:
+            print(colored(" [Inconclusive] Only optional response received (no required types specified).", "yellow"))
+            return 1, result
+        else:
+            if allow_timeout:
+                print(colored(" [Inconclusive] No optional response received, but timeout is allowed.", "yellow"))
+                return 1, result
+            else:
+                print(colored(" [Fail] Optional response not received and timeout is not allowed.", "red"))
+                return -1, result
+
+    # All checks passed
+    return 0, result

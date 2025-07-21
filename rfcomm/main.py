@@ -52,8 +52,10 @@ def main():
     print(colored("======================================================", "yellow"))
 
     # [3] Construct base state machine
+    chan_list = []
+    chan_list.append(target_profile_port)
     print(colored("[3/5] CONSTRUCTING BASE STATE MACHINE", "red", "on_white"))
-    sm = construct_sm(target_addr, target_profile_port)
+    sm = construct_sm(target_addr, chan_list)
 
 
     # [4] Expand state machine
