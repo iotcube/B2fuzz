@@ -1,3 +1,5 @@
+# In layer/rfcomm/types/dm.py
+
 import random
 from layer.rfcomm.types.base import RFCOMM
 from layer.rfcomm.util import calc_fcs
@@ -5,84 +7,77 @@ from layer.rfcomm.const import *
 
 class DM(RFCOMM):
     """
-    DM frame generator class\n
-
-    Parameters
-    ----------
-     -
-    
-    Attributes
-    ----------
-    - self.addr: [int] DLCI
-    - self.control: [int] controle bit
-    - self.length: [int] payload length
-    - self.data: [bytes] payload data
-
-    Methods
-    ----------
-     - `.__bytes__()`
-     - `.name()`
-     - `.gen()`
+    Dual-purpose DM frame generator class.
+    - Default: Generates predictable frames for conformance testing/validation.
+    - Fuzzing: Generates random/mutated frames for fuzzing.
     """
+
     def __bytes__(self):
         """
-        When byte() method is called, this method is runed\n
-
-        Returns
-        --------
-        - [bytes]: DM type frame with fcs byte 
+        Serializes the DM object into the correct byte format.
+        DM frames have no data payload.
         """
-        ret = bytes([self.addr])
-        ret += bytes([self.control])
-        ret += bytes([(self.length << 1) + 1])
-        ret += bytes([calc_fcs(3, ret)])
-        return ret
+        # The header consists of Address, Control, and a 1-byte Length field.
+        header = bytes([self.addr, self.control, (self.length << 1) | 1])
+        
+        # FCS for DM is calculated over the 3 header bytes.
+        fcs = calc_fcs(3, header)
+        
+        return header + bytes([fcs])
     
     def name():
         """
         Return DM frame name
-
-        
-        Returns
-        --------
-        - [string] DM frame name
         """
         return 'DM'
     
     @classmethod
-    def gen(cls,channel=0, transition=False,fuzz=False, length=0, dir=0):
+    def gen(cls, channel=0, fuzz=False, **kwargs):
         """
-            Generate DM type frame
+        Generates a complete DM frame.
 
-            Parameters
-            ----------
-            - channel: [int] DLCI to send frame
-            - transition: [bool] transition condition (used state transition)
-            - fuzz: [bool] fuzz condition (used when fuzzing)
-            - length: [int] payload length
-            - dir: [int] direction bit
+        Parameters
+        ----------
+        - channel: [int] The specific DLCI to send the frame for for conformance tests.
+        - fuzz: [bool] If True, enables fuzzing mode.
+        - **kwargs: Catches unused arguments like 'transition'.
 
-
-            Returns
-            ----------
-            - [bytes] DM frame byte
+        Returns
+        ----------
+        - [bytes] A complete DM frame.
         """
-
-        # [1] initialize DM generator class
         ret = DM()
-
-        # [2] when fuzzing, initialize DM frame with AFL mutator
-        if fuzz:
-            ret.addr = gen_param(0b00000011, 1, (0b00000011, 0b11111011))
-            ret.control = RFCOMM_CONTROL.RC_CONTROL_UA
-            ret.length = gen_param(0b01111111, 1, (0b00000000, 0b01111111))
-            return bytes(ret)
         
-        # [3] when transition, initialize DM frame with information for transition
-        ret.addr = 0b00000001
-        ret.addr |= 0 << 1 # C/R
-        ret.addr |= dir << 2 # Direction
-        ret.addr |= channel << 3
+        # --- FUZZING LOGIC ---
+        if fuzz:
+            # Your original fuzzing logic is restored here.
+            # It mutates the address and length fields.
+            # Assuming gen_param is available in the fuzzing context.
+            ret.addr = gen_param(0b00000011, 1, (0b00000011, 0b11111011))
+            
+            # ** BUG FIX: Use the correct control constant for DM **
+            ret.control = RFCOMM_CONTROL.RC_CONTROL_DM
+            
+            # A valid DM length is 0, but fuzzing can test other values.
+            ret.length = gen_param(0, 1, (0, 127))
+            return bytes(ret)
+
+        # --- CONFORMANCE TESTING LOGIC (Default) ---
+        # This generates a standard DM response frame for a specific channel.
+        
+        # Address field: DLCI, Direction, and C/R bit.
+        # A DM frame is a response, so C/R should be 0 from the sender's perspective.
+        cr_bit = 0
+        direction_bit = 0 # Initiator to responder
+        
+        ret.addr = 0b00000001 # EA bit
+        ret.addr |= cr_bit << 1
+        ret.addr |= direction_bit << 2
+        ret.addr |= (channel & 0x1F) << 3 # Use the specified channel
+            
         ret.control = RFCOMM_CONTROL.RC_CONTROL_DM
+        
+        # A valid DM frame has no data payload, so length is always 0.
         ret.length = 0
+        
         return bytes(ret)

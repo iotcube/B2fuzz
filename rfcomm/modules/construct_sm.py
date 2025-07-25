@@ -16,166 +16,154 @@ import time
 import copy
 import os, sys
 from transitions.extensions import GraphMachine
+import bluetooth
+import traceback
 
-VISUALIZE = 1
-"""
-Flag value to print out base, adaptive state machine.
-0 -> disable
-1 -> enable
+class SM:
+    pass
 
-If enabled, `base_sm.png`, `expanded_sm.png` are generated.
-"""
-
-tmp_pkt = None
-"""
-Temporary variable to store the last sent frame for debugging.
-"""
-
-class Visualize:
+def print_sm(machine):
     """
-    Wrapper class for `GraphMachine` to visualize the state machine.
+    Converts a GraphMachine object into a simple dictionary for printing.
     """
-    def __init__(self) -> None:
-        self.m = GraphMachine(model=self, graph_engine="pygraphviz", 
-            states=[state2str(STATE_INITIATED)],
-            initial=state2str(STATE_INITIATED)
-        )
-
-    def add_state(self, state):
-        """Add a state node to the graph."""
-        self.m.add_state(state)
-
-    def add_tr(self, src, dst, frame):
-        """Add a transition edge to the graph."""
-        self.m.add_transition(frame, src, dst)
-
-class SMTraverseError(Exception):
-    """
-    Error for state transition violation.
-
-    This error is raised when a base state transition does not proceed as expected.
-    """
-    def __init__(self, msg):
-        self.msg = msg
+    if not isinstance(machine, GraphMachine):
+        return {}
     
-    def __str__(self):
-        return self.msg
+    sm_dict = {}
+    for state in machine.states:
+        sm_dict[state] = [t.trigger for t in machine.get_triggers(state)]
+    return sm_dict
 
-vis = Visualize()
-"""
-Global Visualize instance for graph construction.
-"""
-
-hidden_state_path = []
-"""
-[List of tuple] - stores newly discovered (hidden) state transitions.
-Format:
-    - [0]: function for transition (see testsuite.py)
-    - [1]: bytes of the frame that caused the transition
-"""
-
-def delete_paired_dev(target_addr):
+def construct_sm(target_addr, target_channels=None, VISUALIZE=True, vis_path="rfcomm_fsm.png"):
     """
-    Utility: Removes a Bluetooth device from the paired list (not used in main logic).
+    Build the RFCOMM state machine by running test suites and collecting path data.
+    Only successful transitions and states are included in the final graph.
     """
-    os.system(f"bluetoothctl disconnect {target_addr}")
-    os.system(f"bluetoothctl remove {target_addr}")
+    from modules.testsuite import (
+        tc_BV_01_C, tc_BV_04_C, tc_BV_05_C, tc_BV_07_C,
+        tc_BV_11_C, tc_BV_13_C, tc_BV_14_C, tc_BV_17_C,
+        tc_BV_19_C, tc_BV_21_C, tc_BV_22_C, tc_BV_25_C
+    )
 
-def print_sm(sm):
-    """
-    Converts state and frame objects in the state machine to strings for pretty-printing.
+    if target_channels is None:
+        target_channels = [1]
 
-    Args:
-        sm (dict): state machine
+    # --- State Machine Initialization ---
+    dummy_model = SM()
+    initial_state = state_name(StateName.SESS_OPEN)
+    machine = GraphMachine(
+        model=dummy_model,
+        states=[initial_state],
+        initial=initial_state,
+        auto_transitions=False,
+        show_conditions=True,
+        use_pygraphviz=True,
+    )
 
-    Returns:
-        dict: printable state machine structure
-    """
-    if sm is None:
-        return {} # Return empty dict if sm is None to prevent crashes
-    ret = {}
-    for ch in sm:
-        per_ch_sm = {}
-        for state in sm[ch]:
-            per_ch_sm[state2str(state)] = [f.name() for f in sm[ch][state]]
-        ret[f"channel{ch}"] = per_ch_sm
-    return ret
+    # --- THIS IS THE NEW STRATEGY: Track added transitions ourselves ---
+    added_transitions = set()
 
-from collections import defaultdict
-from .testsuite import (
-    tc_BV_01_C, tc_BV_04_C, tc_BV_05_C, tc_BV_07_C,
-    tc_BV_11_C, tc_BV_13_C, tc_BV_14_C, tc_BV_17_C,
-    tc_BV_19_C, tc_BV_21_C, tc_BV_22_C, tc_BV_25_C,
-    ensure_rfcomm_session, ensure_dlci_open, ensure_dlci_closed
-)
+    def add_transitions_from_path(path):
+        """Helper function to add successful transitions from a path list to the machine."""
+        if not path: return
+        for src, trigger, dest, success in path:
+            if not success:
+                continue
+            
+            # Create a unique identifier for this transition
+            transition_tuple = (src, trigger, dest)
+            
+            # *** THIS IS THE FIX: Check our own set, not the machine object ***
+            if transition_tuple in added_transitions:
+                continue # Skip if we've already added this exact transition
 
-def construct_sm(target_addr, dlci_list=None, VISUALIZE=False, vis=None):
-    """
-    Probe the peer's RFCOMM baseline state machine by running test suites (tc_*) DLCI by DLCI.
-    For each DLCI:
-        - Open DLCI (05-C)
-        - Run all DLCI-level TCs (13-C, 14-C, 17-C, 19-C, 21-C, 22-C)
-        - Close DLCI (07-C)
-    Session-level TCs (01-C, 11-C, 25-C, 04-C) are run outside DLCI loop.
-    Args:
-        target_addr (str): MAC address of the target device
-        dlci_list (list[int]): List of DLCIs to test (default [1])
-        VISUALIZE (bool): Whether to render visualization
-        vis: Visualization engine (if any)
-    Returns:
-        dict: (Optional) Result summary (could be extended as needed)
-    """
-    if dlci_list is None:
-        dlci_list = [1]
-    open_dlci_set = set()
+            # Add states if they don't exist
+            if src not in machine.states:
+                machine.add_state(src)
+            if dest not in machine.states:
+                machine.add_state(dest)
+            
+            # Add the new transition and record it
+            machine.add_transition(trigger=trigger, source=src, dest=dest)
+            added_transitions.add(transition_tuple)
+
+    # --- Test Execution and State Machine Construction ---
     sock = None
+    open_dlci_set = set()
+    try:
+        # 1. Session-level open
+        path, sock = tc_BV_01_C(target_addr)
+        add_transitions_from_path(path)
+        if not sock:
+            print(colored("[!] Session initialization failed. Aborting.", "red"))
+            return machine # Return the machine in its current state
 
-    # 1. Session-level open
-    print(colored("[*] RFCOMM Session Initialization (BV-01-C)", "cyan"))
-    status, sock = tc_BV_01_C(target_addr)
-    if status < 0 or sock is None:
-        print(colored("[!] Failed to initialize RFCOMM session. Aborting...", "red"))
-        return None
+        # 2. Session-level tests
+        path, sock = tc_BV_11_C(sock, target_addr)
+        add_transitions_from_path(path)
+        
+        path, sock = tc_BV_25_C(sock, target_addr)
+        add_transitions_from_path(path)
 
-    # 2. Session-level TEST (BV-11-C)
-    print(colored("[*] Session TEST command (BV-11-C)", "cyan"))
-    tc_BV_11_C(sock, target_addr)
+        # 3. Loop through each target channel and run DLCI-specific tests
+        for dlci in target_channels:
+            print(colored(f"\n=== [DLCI {dlci}] Sequence Start ===", "magenta"))
+            
+            path, sock = tc_BV_05_C(sock, target_addr, dlci)
+            add_transitions_from_path(path)
+            
+            # Check if the DLCI was successfully opened before proceeding
+            if state_name(StateName.DATA_OPEN, dlci) in machine.states:
+                open_dlci_set.add(dlci)
+            else:
+                print(colored(f"[!] DLCI {dlci} failed to open. Skipping to next.", "red"))
+                continue
 
-    # 3. DLCI별 테스트
-    for dlci in dlci_list:
-        print(colored(f"\n=== [DLCI {dlci}] Sequence Start ===", "magenta"))
-        # 3.1 DLCI Open (BV-05-C)
-        status, sock = tc_BV_05_C(sock, target_addr, dlci)
-        if status == 0 and sock is not None:
-            open_dlci_set.add(dlci)
-        else:
-            print(colored(f"[!] DLCI {dlci} failed to open. Skipping to next.", "red"))
-            continue
+            # Run tests that require an open DLCI
+            path, sock = tc_BV_13_C(sock, target_addr, dlci, open_dlci_set)
+            add_transitions_from_path(path)
+            
+            path, sock = tc_BV_14_C(sock, target_addr, dlci, open_dlci_set)
+            add_transitions_from_path(path)
+            
+            path, sock = tc_BV_17_C(sock, target_addr, dlci, open_dlci_set)
+            add_transitions_from_path(path)
+            
+            path, sock = tc_BV_19_C(sock, target_addr, dlci, open_dlci_set)
+            add_transitions_from_path(path)
+            
+            path, sock = tc_BV_21_C(sock, target_addr, dlci, open_dlci_set)
+            add_transitions_from_path(path)
+            
+            path, sock = tc_BV_22_C(sock, target_addr, dlci, open_dlci_set)
+            add_transitions_from_path(path)
 
-        # 3.2 DLCI별 TC 수행 (각각 open_dlci_set 넘겨줌)
-        tc_BV_13_C(sock, target_addr, dlci, open_dlci_set)
-        tc_BV_14_C(sock, target_addr, dlci, open_dlci_set)
-        tc_BV_17_C(sock, target_addr, dlci, open_dlci_set)
-        tc_BV_19_C(sock, target_addr, dlci, open_dlci_set)
-        tc_BV_21_C(sock, target_addr, dlci, open_dlci_set)
-        tc_BV_22_C(sock, target_addr, dlci, open_dlci_set)
+            path, sock = tc_BV_07_C(sock, target_addr, dlci, open_dlci_set)
+            add_transitions_from_path(path)
 
-        # 3.3 DLCI Close (BV-07-C)
-        tc_BV_07_C(sock, target_addr, dlci, open_dlci_set)
-        open_dlci_set.discard(dlci)
-        print(colored(f"=== [DLCI {dlci}] Sequence End ===\n", "magenta"))
+            print(colored(f"=== [DLCI {dlci}] Sequence End ===\n", "magenta"))
 
-    # 4. Session-level NSC/Invalid Command Test (BV-25-C)
-    print(colored("[*] Session NSC/Invalid Command (BV-25-C)", "cyan"))
-    tc_BV_25_C(sock, target_addr)
+        path = tc_BV_04_C(sock, target_addr, [])
+        add_transitions_from_path(path)
+        sock = None
 
-    # 5. Session-level Cleanup/Shutdown (BV-04-C)
-    print(colored("[*] Session Shutdown (BV-04-C)", "cyan"))
-    tc_BV_04_C(sock, list(open_dlci_set))
-    open_dlci_set.clear()
+    except Exception as e:
+        print(colored(f"[-] A critical error occurred in construct_sm: {e}", "red"))
+        traceback.print_exc()
+        if sock: sock.close()
 
-    print(colored("\n[Result] RFCOMM State Machine Sequence Complete.", "cyan"))
-    return None  # Or collect and return per-TC result summary if needed
+    print(colored("\n[Result] RFCOMM State Machine Construction Complete.", "cyan"))
+
+    # 5. Visualization (optional)
+    if VISUALIZE:
+        try:
+            # The machine object now holds the graph of all successful state transitions.
+            machine.get_graph().draw(vis_path, prog='dot')
+            print(colored(f"[+] State machine diagram saved to {vis_path}", "green"))
+        except Exception as e:
+            print(colored(f"[!] Visualization failed. Ensure pygraphviz is installed (`pip install pygraphviz`): {e}", "red"))
+
+    return machine
 
 def recv_pkt(sock):
     """

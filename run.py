@@ -7,6 +7,7 @@ def parse_option():
     parser.add_argument('-p', '--pcap', dest='pcapng_file', help='Path to pcapng file (for L2CAP)')
     parser.add_argument('-o', '--onetime', type=int, dest='onetime', help='One-time mode (for L2CAP)')
     parser.add_argument('--ba', dest='target_addr', help='Target Bluetooth address (for RFCOMM)')
+    parser.add_argument('--visualize', '-v', dest='visualize', action='store_true', help='Visualize state machine graph (for RFCOMM)')
     args = parser.parse_args()
     return args
 
@@ -36,6 +37,8 @@ def main():
         args_list = ['python3', 'rfcomm/main.py']
         if args.target_addr is not None:
             args_list.extend(['--ba', args.target_addr])
+        if args.visualize:
+            args_list.append('--visualize')
         subprocess.run(args_list)
     else:
         print('Invalid protocol selection.')

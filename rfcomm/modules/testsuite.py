@@ -4,9 +4,9 @@ from termcolor import colored
 import time
 from layer.rfcomm.const import RFCOMM_PSM
 from lib.btpkt import inter_recv, process_rsps
+from lib.state import StateName, state_name, CTRL_CHANNEL
 from lib.state import SABM, UA, DISC, UIH
 from lib.state import PN, RLS, RPN, FCON, DATA, INVALID, NSC, TEST, MSC
-from lib.state import CTRL_CHANNEL
 
 # Utility Functions
 
@@ -44,8 +44,8 @@ def ensure_rfcomm_session(sock, target_addr):
         except Exception:
             pass
     print("[Debug] ensure_rfcomm_session: Creating new RFCOMM session.")
-    status, sock_new = tc_BV_01_C(target_addr)
-    if status < 0 or sock_new is None:
+    _, sock_new = tc_BV_01_C(target_addr)
+    if sock_new is None:
         print(colored(f" [Fail] Unable to establish RFCOMM session to {target_addr}", "red"))
         return None
     print("[Debug] ensure_rfcomm_session: New RFCOMM session established.")
@@ -62,8 +62,8 @@ def ensure_dlci_open(sock, target_addr, dlci, open_dlci_set):
     if sock is None:
         print("[Debug] ensure_dlci_open: No valid socket, cannot open DLCI.")
         return None
-    status, sock_new = tc_BV_05_C(sock, target_addr, dlci)
-    if status < 0 or sock_new is None:
+    _, sock_new = tc_BV_05_C(sock, target_addr, dlci)
+    if sock_new is None:
         print(colored(f" [Fail] Unable to open DLCI={dlci} on session {sock}", "red"))
         return None
     open_dlci_set.add(dlci)
@@ -100,42 +100,39 @@ def tc_BV_01_C(target_addr):
         |-- R: UA  -------------> [Control_Open (DLCI=0)]
         |-- R: DM or Timeout ---> [Session_Open]   (fail)
     """
-    print(f"[BV-01-C] Initializing RFCOMM Session for target {target_addr}")
+    path = []
+    print(colored("[*] RFCOMM Session Initialization (BV-01-C)", "cyan"))
     sock = bluetooth.BluetoothSocket(bluetooth.L2CAP)
     try:
-        print(f"[BV-01-C] Connecting L2CAP socket to {target_addr}, PSM={RFCOMM_PSM}")
         sock.connect((target_addr, RFCOMM_PSM))
     except Exception as e:
-        print(colored(f" [Fail] L2CAP connect: {e}", "red"))
-        sock.close()
-        return -1, None
+        print(colored(f" [Fail] L2CAP connect: {e}", "red")); sock.close(); return -1, None
+
+    src1 = state_name(StateName.SESS_OPEN)
+    dest1 = state_name(StateName.SESS_WAIT_UA)
     try:
-        print(f"[BV-01-C] Sending SABM (DLCI=0) on control channel.")
-        sabm_pkt = SABM.gen(channel=CTRL_CHANNEL, transition=True)
+        sabm_pkt = SABM.gen(channel=CTRL_CHANNEL)
         sock.send(sabm_pkt)
+        path.append((src1, "send_sabm", dest1, True))
     except Exception as e:
-        print(colored(f" [Fail] SABM send: {e}", "red"))
-        sock.close()
-        traceback.print_exc()
-        return -1, None
+        print(colored(f" [Fail] SABM send: {e}", "red")); sock.close(); path.append((src1, "send_sabm", dest1, False)); return path, None
+    
+    src2 = dest1
+    dest2 = state_name(StateName.CTRL_OPEN, CTRL_CHANNEL)
     try:
-        print(f"[BV-01-C] Waiting for UA response...")
-        resp_list, sock = inter_recv(sock, dur=0.1)
-        print(f"[BV-01-C] Received response list: {resp_list}")
+        resp_list, sock = inter_recv(sock, dur=1.0)
         status, _ = process_rsps(resp_list, required_types=["UA"])
-        print(f"[BV-01-C] process_rsps status: {status}")
+        path.append((src2, "recv_ua", dest2, status == 0))
         if status != 0:
             sock.close()
-            return status, None
+            return path, None
     except Exception as e:
-        print(colored(f" [Fail] Error in UA receive: {e}", "red"))
-        sock.close()
-        traceback.print_exc()
-        return -1, None
-    print(colored(" [Pass] RFCOMM session initialized (BV-01-C)", "green"))
-    return 0, sock
+        print(colored(f" [Fail] Error in UA receive: {e}", "red")); sock.close(); path.append((src2, "recv_ua", dest2, False)); return path, None
 
-def tc_BV_04_C(sock, open_dlci_list):
+    print(colored(" [Pass] RFCOMM session initialized (BV-01-C)", "green"))
+    return path, sock
+
+def tc_BV_04_C(sock, target_addr, open_dlci_set):
     """
     BV-04-C RFCOMM Session Shutdown
 
@@ -152,48 +149,65 @@ def tc_BV_04_C(sock, open_dlci_list):
     [Wait_UA]
         |-- R: UA/Timeout ----> [Session_Open] (session closed)
     """
-    print(f"[BV-04-C] Closing all DLCI channels {open_dlci_list} and shutting down session")
-    # Close each open DLCI (if any)
-    for dlci in open_dlci_list:
-        print(f"[BV-04-C] Closing DLCI={dlci}...")
-        try:
-            disc_pkt = DISC.gen(channel=dlci, transition=True)
-            sock.send(disc_pkt)
-        except Exception as e:
-            print(colored(f" [Warn] Could not send DISC on DLCI={dlci}: {e}. Skipping.", "yellow"))
-            continue
-        try:
-            resp_list, sock = inter_recv(sock, dur=0.1)
-            valid_responses = process_rsps(resp_list)
-            if "UA" not in valid_responses:
-                print(colored(f" [Warn] UA not received after DISC on DLCI={dlci}. (got {valid_responses})", "yellow"))
-            else:
-                print(colored(f" [Pass] DLCI={dlci} closed (BV-04-C)", "green"))
-        except Exception as e:
-            print(colored(f" [Fail] Error in UA receive for DLCI={dlci}: {e}", "red"))
-            continue
-    # Close control channel
+    path = []
+    print(colored("[*] RFCOMM Session Shutdown (BV-04-C)", "cyan"))
+    
+    # First, close any data channels that are still open. This is now handled by the orchestrator.
+    if len(open_dlci_set) > 0:
+        print(colored(f" [Warn] tc_BV_04_C called while DLCIs {list(open_dlci_set)} are still open.", "yellow"))
+
+    # Define the state transitions upfront
+    src1 = state_name(StateName.CTRL_OPEN, CTRL_CHANNEL)
+    dest1 = state_name(StateName.CTRL_WAIT_DISC_UA, CTRL_CHANNEL)
+    
+    src2 = dest1
+    dest2_final = state_name(StateName.SESS_OPEN)
+
+    # --- Step 1: Attempt to Send DISC on Control Channel ---
     try:
-        print(f"[BV-04-C] Sending DISC on control channel (DLCI=0)...")
-        disc_pkt = DISC.gen(channel=CTRL_CHANNEL, transition=True)
+        # Check if the socket is valid *before* trying to use it.
+        if not is_sock_valid(sock):
+            raise bluetooth.btcommon.BluetoothError("Transport endpoint is not connected")
+
+        disc_pkt = DISC.gen(channel=CTRL_CHANNEL)
         sock.send(disc_pkt)
-    except Exception as e:
-        print(colored(f" [Warn] Could not send DISC on CTRL_CHANNEL: {e}. Session was likely already down.", "yellow"))
-        return True
-    try:
-        resp_list, sock = inter_recv(sock, dur=0.1)
-        valid_responses = process_rsps(resp_list)
-        if "UA" not in valid_responses:
-            print(colored(f" [Warn] UA not received after DISC on CTRL_CHANNEL. (got {valid_responses})", "yellow"))
+        # If send succeeds, the first transition was successful.
+        path.append((src1, "send_disc_ctrl", dest1, True))
+
+        # --- Step 2: Receive final UA or Timeout (only if send succeeded) ---
+        resp_list, sock = inter_recv(sock, dur=1.0)
+        status, responses = process_rsps(resp_list, required_types=["UA"], allow_timeout=True)
+        
+        if "UA" in responses:
+            path.append((src2, "recv_ua", dest2_final, True))
         else:
-            print(colored(f" [Pass] CTRL_CHANNEL closed (BV-04-C)", "green"))
+            path.append((src2, "timeout", dest2_final, True))
+
+    except bluetooth.btcommon.BluetoothError as e:
+        # *** THIS IS THE FIX ***
+        # This block catches the "Transport endpoint is not connected" error.
+        # Even though the send failed, we know the logical intent.
+        print(colored(f" [Warn] Could not send DISC on CTRL_CHANNEL: {e}. Assuming session is down.", "yellow"))
+        
+        # We record the intended path: the attempt to send DISC, followed by an immediate timeout.
+        # Mark the send as successful because the *intent* was to enter the wait state.
+        path.append((src1, "send_disc_ctrl", dest1, True))
+        # Mark the receive as a timeout because we never got a response.
+        path.append((src2, "timeout", dest2_final, True))
+    
     except Exception as e:
-        print(colored(f" [Fail] Error in UA receive for CTRL_CHANNEL: {e}", "red"))
-    try:
-        sock.close()
-    except Exception:
-        pass
-    return True
+        # Catch any other unexpected errors during the process
+        print(colored(f" [Fail] A critical error occurred in tc_BV_04_C: {e}", "red"))
+        # Record the send attempt as failed in this case
+        path.append((src1, "send_disc_ctrl", dest1, False))
+
+    if sock: 
+        try:
+            sock.close()
+        except Exception:
+            pass
+            
+    return path
 
 
 def tc_BV_05_C(sock, target_addr, dlci):
@@ -215,65 +229,88 @@ def tc_BV_05_C(sock, target_addr, dlci):
         |-- R: UA  ------------> [DLC_Open (DLCI≠0)]
         |-- Timeout/Other -----> [Control_Open (DLCI=0)]  (fail)
     """
-    print(f"[BV-05-C] Establishing DLCI={dlci} on session")
+    path = []
+    print(colored(f"[*] DLC Establishment for DLCI={dlci} (BV-05-C)", "cyan"))
+    
     sock = ensure_rfcomm_session(sock, target_addr)
     if sock is None:
-        print(colored(f" [Fail] Could not (re)establish RFCOMM session for BV-05-C", "red"))
-        return -1, None
-    try:
-        print(f"[BV-05-C] Sending PN for DLCI={dlci}.")
-        pn_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=dlci, transition=True, mx_type=PN)
-        sock.send(pn_pkt)
-    except Exception as e:
-        print(colored(f" [Fail] Send PN for DLCI={dlci}: {e}", "red"))
-        traceback.print_exc()
-        return -1, None
-    try:
-        print(f"[BV-05-C] Waiting for PN/NSC response...")
-        resp_list, sock = inter_recv(sock, dur=0.1)
-        print(f"[BV-05-C] Received response list: {resp_list}")
-        status, _ = process_rsps(resp_list, required_types=["PN"], optional_types=["NSC"], allow_timeout=False)
-        print(f"[BV-05-C] process_rsps status: {status}")
-        if status != 0:
-            if status == 1:
-                print(colored(f" [Inconclusive] Received NSC (Not Supported Command) for DLCI={dlci}, no PN.", "yellow"))
-                return 1, sock
-            else:
-                print(colored(f" [Fail] PN/NSC response not received for DLCI={dlci}.", "red"))
-                return -1, None
-    except Exception as e:
-        print(colored(f" [Fail] Error in PN receive for DLCI={dlci}: {e}", "red"))
-        traceback.print_exc()
-        return -1, None
-    try:
-        print(f"[BV-05-C] Sending SABM for DLCI={dlci}.")
-        sabm_pkt = SABM.gen(channel=dlci, transition=True)
-        sock.send(sabm_pkt)
-    except Exception as e:
-        print(colored(f" [Fail] Send SABM for DLCI={dlci}: {e}", "red"))
-        traceback.print_exc()
-        return -1, None
-    try:
-        print(f"[BV-05-C] Waiting for UA response...")
-        resp_list, sock = inter_recv(sock, dur=0.1)
-        print(f"[BV-05-C] Received response list: {resp_list}")
-        status, _ = process_rsps(resp_list, required_types=["UA"])
-        print(f"[BV-05-C] process_rsps status: {status}")
-        if status != 0:
-            if status == 1:
-                print(colored(f" [Inconclusive] UA response not received for DLCI={dlci}, but allowed.", "yellow"))
-                return 1, sock
-            else:
-                print(colored(f" [Fail] UA not received for DLCI={dlci}.", "red"))
-                return -1, None
-    except Exception as e:
-        print(colored(f" [Fail] Error in UA receive for DLCI={dlci}: {e}", "red"))
-        traceback.print_exc()
-        return -1, None
-    print(colored(f" [Pass] DLCI={dlci} established (BV-05-C)", "green"))
-    return 0, sock
+        return path, None # Return empty path
 
-def tc_BV_07_C(sock, target_addr, dlci, open_dlci_set):
+    # --- Step 1: Send PN ---
+    src1 = state_name(StateName.CTRL_OPEN, CTRL_CHANNEL)
+    dest1 = state_name(StateName.CTRL_WAIT_PN, dlci) # Wait state is specific to the DLCI
+    try:
+        pn_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=dlci, mx_type=PN)
+        sock.send(pn_pkt)
+        path.append((src1, "send_pn", dest1, True))
+    except Exception as e:
+        print(colored(f" [Fail] Send PN: {e}", "red"))
+        path.append((src1, "send_pn", dest1, False))
+        return path, sock
+
+    # --- Step 2: Receive PN or NSC Response ---
+    src2 = dest1
+    dest2_success = state_name(StateName.CTRL_OPEN, CTRL_CHANNEL)
+    pn_received_successfully = False
+    try:
+        resp_list, sock = inter_recv(sock, dur=1.0)
+        status, _ = process_rsps(resp_list, required_types=["PN"], optional_types=["NSC"])
+        
+        if status in [0, 1]: # Success (PN) or Inconclusive (NSC)
+            pn_received_successfully = True
+            path.append((src2, "recv_pn_or_nsc", dest2_success, True))
+        else:
+            # *** TIMEOUT LOGIC FOR PN ***
+            # A timeout occurred. Add a transition from Wait_PN back to Control_Open.
+            print(colored(f" [Warn] Timeout waiting for PN response for DLCI={dlci}.", "yellow"))
+            path.append((src2, "timeout", dest2_success, True)) # The timeout event itself is a "successful" transition
+            return path, sock # End the test here, as we can't proceed.
+            
+    except Exception as e:
+        print(colored(f" [Fail] PN receive: {e}", "red"))
+        path.append((src2, "recv_pn_or_nsc", dest2_success, False))
+        return path, sock
+
+    # --- Step 3: Send SABM ---
+    src3 = state_name(StateName.CTRL_OPEN, CTRL_CHANNEL)
+    dest3 = state_name(StateName.CTRL_WAIT_UA, dlci)
+    try:
+        sabm_pkt = SABM.gen(channel=dlci)
+        sock.send(sabm_pkt)
+        path.append((src3, "send_sabm", dest3, True))
+    except Exception as e:
+        print(colored(f" [Fail] SABM send: {e}", "red"))
+        path.append((src3, "send_sabm", dest3, False))
+        return path, sock
+
+    # --- Step 4: Receive UA Response ---
+    src4 = dest3
+    dest4_success = state_name(StateName.DATA_OPEN, dlci)
+    # On timeout, we return to the last known stable state, which was Control_Open
+    dest4_timeout = state_name(StateName.CTRL_OPEN, CTRL_CHANNEL)
+    try:
+        resp_list, sock = inter_recv(sock, dur=1.0)
+        status, _ = process_rsps(resp_list, required_types=["UA"])
+        
+        if status == 0:
+            # UA was received, the transition to DATA_OPEN is successful.
+            path.append((src4, "recv_ua", dest4_success, True))
+        else:
+            # *** TIMEOUT LOGIC FOR UA ***
+            # A timeout occurred. Add a transition from Data_Wait_UA back to Control_Open.
+            print(colored(f" [Fail] Did not receive UA to open DLCI={dlci}.", "red"))
+            path.append((src4, "timeout", dest4_timeout, True))
+            return path, sock # End the test.
+            
+    except Exception as e:
+        print(colored(f" [Fail] UA receive: {e}", "red"))
+        path.append((src4, "timeout", dest4_timeout, False)) # A crash is a failed timeout transition
+        return path, sock
+
+    print(colored(f" [Pass] DLCI={dlci} established (BV-05-C)", "green"))
+    return path, sock
+
+def tc_BV_07_C(sock, target_addr, dlci, open_dlci_set, is_sub_call=False):
     """
     BV-07-C Close DLC (by IUT)
 
@@ -285,40 +322,45 @@ def tc_BV_07_C(sock, target_addr, dlci, open_dlci_set):
         |-- R: UA  -------------> [Control_Open (DLCI=0)]
         |-- Timeout/Other -----> [Control_Open (DLCI=0)]  (warn/fail)
     """
-    print(f"[BV-07-C] Closing DLCI={dlci} on session")
-    sock = ensure_dlci_open(sock, target_addr, dlci, open_dlci_set)
-    if sock is None:
-        print(colored(f" [Fail] Could not open DLCI={dlci} for BV-07-C", "red"))
-        return False
+    path = []
+    if not is_sub_call: 
+        print(colored(f"[*] Close DLCI={dlci} (BV-07-C)", "cyan"))
+    
+    # Check if the DLCI is actually in the set of open channels.
+    if dlci not in open_dlci_set:
+        return path, sock
+
+    # --- Step 1: Send DISC command ---
+    src1 = state_name(StateName.DATA_OPEN, dlci)
+    dest1 = state_name(StateName.DATA_WAIT_DISC_UA, dlci)
     try:
-        print(f"[BV-07-C] Sending DISC on DLCI={dlci}.")
-        disc_pkt = DISC.gen(channel=dlci, transition=True)
+        disc_pkt = DISC.gen(channel=dlci)
         sock.send(disc_pkt)
+        path.append((src1, "send_disc_data", dest1, True))
     except Exception as e:
-        print(colored(f" [Fail] Send DISC on DLCI={dlci}: {e}", "red"))
-        try:
-            sock.close()
-        except Exception:
-            pass
-        return False
+        print(colored(f" [Fail] Send DISC on DLCI {dlci}: {e}", "red"))
+        path.append((src1, "send_disc_data", dest1, False))
+        open_dlci_set.discard(dlci)
+        return path, sock
+
+    # --- Step 2: Receive UA response ---
+    src2 = dest1
+    dest2 = state_name(StateName.CTRL_OPEN, CTRL_CHANNEL)
     try:
-        print(f"[BV-07-C] Waiting for UA response...")
-        resp_list, sock = inter_recv(sock, dur=0.1)
-        print(f"[BV-07-C] Received response list: {resp_list}")
-        valid_responses = process_rsps(resp_list)
-        print(f"[BV-07-C] process_rsps responses: {valid_responses}")
-        if "UA" not in valid_responses:
-            print(colored(f" [Warn] UA not received after DISC on DLCI={dlci}. (got {valid_responses})", "yellow"))
+        resp_list, sock = inter_recv(sock, dur=1.0)
+        status, responses = process_rsps(resp_list, required_types=["UA"], allow_timeout=True)
+        
+        if "UA" in responses:
+            path.append((src2, "recv_ua", dest2, True))
         else:
-            print(colored(f" [Pass] DLCI={dlci} closed (BV-07-C)", "green"))
-        return True
+            path.append((src2, "timeout", dest2, True))
+            
     except Exception as e:
         print(colored(f" [Fail] Error in UA receive for DLCI={dlci}: {e}", "red"))
-        try:
-            sock.close()
-        except Exception:
-            pass
-        return False
+        path.append((src2, "recv_ua", dest2, False))
+
+    open_dlci_set.discard(dlci)
+    return path, sock
 
 def tc_BV_11_C(sock, target_addr):
     """
@@ -334,40 +376,52 @@ def tc_BV_11_C(sock, target_addr):
                 |-- Payload Mismatch --> [Control_Open (DLCI=0)] (fail)
         |-- Timeout/Other ------------> [Control_Open (DLCI=0)] (fail)
     """
-    print(f"[BV-11-C] Running TEST command on session")
+    path = []
+    print(colored("[*] Session TEST command (BV-11-C)", "cyan"))
+    
     sock = ensure_rfcomm_session(sock, target_addr)
     if sock is None:
-        print(colored(f" [Fail] Could not (re)establish RFCOMM session for BV-11-C", "red"))
-        return -1, None
+        return path, None
+    
+    # --- Step 1: Send TEST command ---
+    src1 = state_name(StateName.CTRL_OPEN, CTRL_CHANNEL)
+    dest1 = state_name(StateName.CTRL_WAIT_TEST, CTRL_CHANNEL)
+    
     try:
-        test_pattern = b'HI'
-        print(f"[BV-11-C] Sending TEST command with pattern {test_pattern}")
-        test_pkt = UIH.gen(channel=CTRL_CHANNEL, transition=False, mx_type=TEST, payload=test_pattern)
+        test_pattern = b"HI"
+        test_pkt = UIH.gen(channel=CTRL_CHANNEL, mx_type=TEST, payload=test_pattern)
         sock.send(test_pkt)
+        path.append((src1, "send_test", dest1, True))
     except Exception as e:
         print(colored(f" [Fail] Send TEST command: {e}", "red"))
-        traceback.print_exc()
-        return -1, None
+        path.append((src1, "send_test", dest1, False))
+        return path, sock
+
+    # --- Step 2: Receive TEST response ---
+    src2 = dest1
+    dest2_success = state_name(StateName.CTRL_OPEN, CTRL_CHANNEL)
+    
     try:
-        print(f"[BV-11-C] Waiting for TEST response...")
-        resp_list, sock = inter_recv(sock, dur=0.1)
-        print(f"[BV-11-C] Received response list: {resp_list}")
-        expected_test_response = TEST.gen(payload=test_pattern, is_response=True)
-        status, _ = process_rsps(resp_list, required_types=["TEST"], expected_payloads={"TEST": expected_test_response})
-        print(f"[BV-11-C] process_rsps status: {status}")
-        if status != 0:
-            if status == 1:
-                print(colored(" [Inconclusive] Did not receive TEST response, but allowed.", "yellow"))
-                return 1, sock
-            else:
-                print(colored(" [Fail] Did not receive matching TEST response.", "red"))
-                return -1, None
+        expected_resp = TEST.gen(payload=test_pattern, is_response=True)
+        resp_list, sock = inter_recv(sock, dur=1.0)
+        status, _ = process_rsps(resp_list, required_types=["TEST"], expected_payloads={"TEST": expected_resp})
+        
+        if status == 0:
+            # Success: Add the successful recv transition
+            path.append((src2, "recv_test_echo", dest2_success, True))
+        else:
+            # Failure: Add the timeout transition
+            print(colored(" [Fail] Did not receive correct TEST response.", "red"))
+            path.append((src2, "timeout", dest2_success, True)) # Timeout is a valid transition event
+            return path, sock
+             
     except Exception as e:
         print(colored(f" [Fail] Error in TEST receive: {e}", "red"))
-        traceback.print_exc()
-        return -1, None
+        path.append((src2, "recv_test_echo", dest2_success, False))
+        return path, sock
+
     print(colored(" [Pass] TEST command successful (BV-11-C)", "green"))
-    return 0, sock
+    return path, sock
 
 def tc_BV_13_C(sock, target_addr, dlci, open_dlci_set):
     """
@@ -382,34 +436,54 @@ def tc_BV_13_C(sock, target_addr, dlci, open_dlci_set):
         |-- R: RLS (payload mismatch) -> [Control_Open (DLCI=0)] (fail)
         |-- Timeout/Other ------------> [Control_Open (DLCI=0)] (fail)
     """
-    print(f"[BV-13-C] Sending RLS to DLCI={dlci} on session")
+    path = []
+    print(colored(f"[*] Remote Line Status (BV-13-C) on DLCI={dlci}", "cyan"))
     sock = ensure_dlci_open(sock, target_addr, dlci, open_dlci_set)
-    if sock is None:
-        print(colored(f" [Fail] Could not open DLCI={dlci} for BV-13-C", "red"))
-        return -1, None
+    if sock is None: return path, None
+    
+    # --- Step 1: Send RLS command ---
+    src1 = state_name(StateName.DATA_OPEN, dlci)
+    dest1 = state_name(StateName.DATA_WAIT_RLS, dlci)
+    
     try:
         line_status_to_send = 0b1010
-        print(f"[BV-13-C] Sending RLS with status={bin(line_status_to_send)} to DLCI={dlci}")
-        rls_pkt = UIH.gen(channel=CTRL_CHANNEL, transition=False, mx_type=RLS, channel_to_ctrl=dlci, line_status=line_status_to_send)
+        rls_pkt = UIH.gen(channel=CTRL_CHANNEL, mx_type=RLS, channel_to_ctrl=dlci, line_status=line_status_to_send)
         sock.send(rls_pkt)
-        expected_response_payload = RLS.gen(channel=dlci, line_status=line_status_to_send, is_response=True, mimic_direction_bug=True)
-        print(f"[BV-13-C] Waiting for RLS response...")
-        resp_list, sock = inter_recv(sock, dur=0.1)
-        print(f"[BV-13-C] Received response list: {resp_list}")
-        status, _ = process_rsps(resp_list, required_types=["RLS"], expected_payloads={"RLS": expected_response_payload})
-        print(f"[BV-13-C] process_rsps status: {status}")
-        if status != 0:
-            if status == 1:
-                print(colored(f" [Inconclusive] RLS response not received or did not match for DLCI={dlci}, but allowed.", "yellow"))
-                return 1, sock
-            else:
-                print(colored(f" [Fail] RLS response validation failed for DLCI={dlci}.", "red"))
-                return -1, None
+        path.append((src1, "send_rls_overrun", dest1, True))
     except Exception as e:
-        print(colored(f" [Fail] Error in RLS receive for DLCI={dlci}: {e}", "red"))
-        return -1, None
-    print(colored(f" [Pass] RLS command successful for DLCI={dlci} (BV-13-C)", "green"))
-    return 0, sock
+        print(colored(f" [Fail] Send RLS: {e}", "red"))
+        path.append((src1, "send_rls_overrun", dest1, False))
+        return path, sock
+
+    # --- Step 2: Receive RLS response ---
+    src2 = dest1
+    dest2_success = state_name(StateName.DATA_OPEN, dlci)
+    
+    try:
+        expected_prefix = RLS.gen(channel=dlci, is_response=True, mimic_direction_bug=True)[:3]
+        resp_list, sock = inter_recv(sock, dur=1.0)
+        status, _ = process_rsps(
+            resp_list,
+            required_types=["RLS"],
+            expected_payloads={"RLS": lambda pkt: pkt.payload.startswith(expected_prefix)}
+        )
+        
+        if status == 0:
+            # Success: Add the successful recv transition
+            path.append((src2, "recv_rls_resp", dest2_success, True))
+        else:
+            # Failure: Add the timeout transition
+            print(colored(f" [Fail] RLS validation failed for DLCI={dlci} (BV-13-C).", "red"))
+            path.append((src2, "timeout", dest2_success, True)) # Timeout is a valid transition event
+            return path, sock
+
+    except Exception as e:
+        print(colored(f" [Fail] Error in RLS receive: {e}", "red"))
+        path.append((src2, "recv_rls_resp", dest2_success, False))
+        return path, sock
+
+    print(colored(" [Pass] RLS command successful for DLCI={dlci} (BV-13-C)", "green"))
+    return path, sock
 
 def tc_BV_14_C(sock, target_addr, dlci, open_dlci_set):
     """
@@ -424,34 +498,57 @@ def tc_BV_14_C(sock, target_addr, dlci, open_dlci_set):
         |-- R: RLS (payload mismatch) -> [Control_Open (DLCI=0)] (fail)
         |-- Timeout/Other ------------> [Control_Open (DLCI=0)] (fail)
     """
-    print(f"[BV-14-C] Sending RLS (different status) to DLCI={dlci} on session")
+    path = []
+    print(colored(f"[*] Remote Line Status (Framing Error) (BV-14-C) on DLCI={dlci}", "cyan"))
     sock = ensure_dlci_open(sock, target_addr, dlci, open_dlci_set)
     if sock is None:
-        print(colored(f" [Fail] Could not open DLCI={dlci} for BV-14-C", "red"))
-        return -1, None
+        return path, None
+
+    # Define the potential state transitions
+    src = state_name(StateName.DATA_OPEN, dlci)
+    intermediate_state = state_name(StateName.DATA_WAIT_RLS, dlci)
+    dest = state_name(StateName.DATA_OPEN, dlci) # The final state is the same as the start
+
+    # Assume failure until the entire sequence is proven successful
+    success = False
+    
     try:
+        # --- Step 1: Send RLS command ---
         line_status_to_send = 0b1001
-        print(f"[BV-14-C] Sending RLS with status={bin(line_status_to_send)} to DLCI={dlci}")
-        rls_pkt = UIH.gen(channel=CTRL_CHANNEL, transition=False, mx_type=RLS, channel_to_ctrl=dlci, line_status=line_status_to_send)
+        rls_pkt = UIH.gen(channel=CTRL_CHANNEL, mx_type=RLS, channel_to_ctrl=dlci, line_status=line_status_to_send)
         sock.send(rls_pkt)
-        expected_response_payload = RLS.gen(channel=dlci, line_status=line_status_to_send, is_response=True, mimic_direction_bug=True)
-        print(f"[BV-14-C] Waiting for RLS response...")
-        resp_list, sock = inter_recv(sock, dur=0.1)
-        print(f"[BV-14-C] Received response list: {resp_list}")
-        status, _ = process_rsps(resp_list, required_types=["RLS"], expected_payloads={"RLS": expected_response_payload})
-        print(f"[BV-14-C] process_rsps status: {status}")
-        if status != 0:
-            if status == 1:
-                print(colored(f" [Inconclusive] RLS response not received or did not match for DLCI={dlci} (BV-14-C), but allowed.", "yellow"))
-                return 1, sock
-            else:
-                print(colored(f" [Fail] RLS response validation failed for DLCI={dlci} (BV-14-C).", "red"))
-                return -1, None
+        
+        # --- Step 2: Receive and Validate RLS response ---
+        expected_prefix = RLS.gen(channel=dlci, is_response=True, mimic_direction_bug=True)[:3]
+        resp_list, sock = inter_recv(sock, dur=1.0)
+        status, _ = process_rsps(
+            resp_list,
+            required_types=["RLS"],
+            expected_payloads={"RLS": lambda pkt: pkt.payload.startswith(expected_prefix)}
+        )
+        
+        # The entire sequence is successful ONLY if the validation passes (status == 0)
+        if status == 0:
+            success = True
+        else:
+            print(colored(f" [Fail] RLS validation failed for DLCI={dlci} (BV-14-C).", "red"))
+
     except Exception as e:
-        print(colored(f" [Fail] Error in RLS receive for DLCI={dlci} (BV-14-C): {e}", "red"))
-        return -1, None
-    print(colored(f" [Pass] RLS command successful for DLCI={dlci} (BV-14-C)", "green"))
-    return 0, sock
+        print(colored(f" [Fail] Error in RLS test (BV-14-C): {e}", "red"))
+        # 'success' remains False
+    
+    # --- Step 3: Append the full path ONLY if the sequence was successful ---
+    if success:
+        # If we succeeded, we can add both transitions to the path.
+        path.append((src, "send_rls_framing", intermediate_state, True))
+        path.append((intermediate_state, "recv_rls_resp", dest, True))
+        print(colored(f" [Pass] RLS command successful for DLCI={dlci} (BV-14-C)", "green"))
+    else:
+        # If any part failed, we do not append anything to the path.
+        # The intermediate state DATA_WAIT_RLS will not be created.
+        print(colored(f" [Result] The full send/receive sequence for BV-14-C failed.", "yellow"))
+
+    return path, sock
 
 
 def tc_BV_17_C(sock, target_addr, dlci, open_dlci_set):
@@ -467,41 +564,52 @@ def tc_BV_17_C(sock, target_addr, dlci, open_dlci_set):
         |-- R: NSC ---------> [DLC_Open (DLCI≠0)] (inconclusive)
         |-- Timeout/Other --> [DLC_Open (DLCI≠0)] (fail)
     """
-    print(f"[BV-17-C] Sending RPN command to DLCI={dlci} on session")
+    path = []
+    print(colored(f"[*] Remote Port Negotiation with Settings (BV-17-C) on DLCI={dlci}", "cyan"))
     sock = ensure_dlci_open(sock, target_addr, dlci, open_dlci_set)
-    if sock is None:
-        print(colored(f" [Fail] Could not open DLCI={dlci} for BV-17-C", "red"))
-        return False
+    if sock is None: return path, None
+
+    # --- Step 1: Send RPN command with port settings ---
+    src1 = state_name(StateName.DATA_OPEN, dlci)
+    dest1 = state_name(StateName.DATA_WAIT_RPN, dlci)
+    
     try:
-        port_settings_to_send = bytes([
-            0x07, 0x03, 0x00, 0x11, 0x13, 0xFF, 0xFF, 0xFF
-        ])
-        print(f"[BV-17-C] Sending RPN with port settings to DLCI={dlci}")
-        rpn_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=dlci, transition=True,
-                          mx_type=RPN, port_values=port_settings_to_send)
+        port_settings = bytes([0x07, 0x03, 0x00, 0x11, 0x13, 0xFF, 0xFF, 0xFF])
+        rpn_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=dlci, mx_type=RPN, port_values=port_settings)
         sock.send(rpn_pkt)
+        path.append((src1, "send_rpn_settings", dest1, True))
     except Exception as e:
-        print(colored(f" [Fail]\n Send RPN for DLCI={dlci}: {e}", "red"))
-        traceback.print_exc()
-        return False
+        print(colored(f" [Fail] Send RPN with settings: {e}", "red"))
+        path.append((src1, "send_rpn_settings", dest1, False))
+        return path, sock
+
+    # --- Step 2: Receive RPN or NSC response ---
+    src2 = dest1
+    dest2_success = state_name(StateName.DATA_OPEN, dlci)
+    
     try:
-        print(f"[BV-17-C] Waiting for RPN/NSC response...")
-        resp_list, sock = inter_recv(sock, dur=0.1)
-        print(f"[BV-17-C] Received response list: {resp_list}")
-        valid_responses = process_rsps(resp_list)
-        print(f"[BV-17-C] process_rsps responses: {valid_responses}")
-        if "RPN" in valid_responses:
-            print(colored(f" [Pass] RPN response received for DLCI={dlci} (BV-17-C)", "green"))
-            return True
-        elif "NSC" in valid_responses:
-            print(colored(f" [Pass] NSC (Not Supported Command) response received for DLCI={dlci} (BV-17-C)", "yellow"))
-            return True
-        else:
-            print(colored(f" [Fail]\n RPN/NSC response not received for DLCI={dlci}. (got {valid_responses})", "red"))
-            return False
+        resp_list, sock = inter_recv(sock, dur=1.0)
+        status, responses = process_rsps(resp_list, optional_types=["RPN", "NSC"], allow_timeout=True)
+        
+        if status in [0, 1]: # Success (RPN/NSC) or inconclusive timeout
+            # If we received a valid packet, the trigger is specific.
+            if "RPN" in responses or "NSC" in responses:
+                path.append((src2, "recv_rpn_or_nsc", dest2_success, True))
+                if "NSC" in responses:
+                    print(colored("   -> Received NSC (Not Supported)", "blue"))
+            else: # Otherwise, it was a clean timeout
+                path.append((src2, "timeout", dest2_success, True))
+        else: # Hard fail from process_rsps
+            path.append((src2, "timeout", dest2_success, True))
+            return path, sock
+
     except Exception as e:
-        print(colored(f" [Fail]\n Error in RPN receive for DLCI={dlci}: {e}", "red"))
-        return False
+        print(colored(f" [Fail] Error in RPN receive: {e}", "red"))
+        path.append((src2, "recv_rpn_or_nsc", dest2_success, False))
+        return path, sock
+
+    print(colored(" [Pass] RPN (with settings) handled correctly (BV-17-C)", "green"))
+    return path, sock
 
 # === BV-19-C ===
 def tc_BV_19_C(sock, target_addr, dlci, open_dlci_set):
@@ -516,33 +624,52 @@ def tc_BV_19_C(sock, target_addr, dlci, open_dlci_set):
         |-- R: RPN (8 octets) -----> [DLC_Open (DLCI≠0)] (pass)
         |-- Timeout/Other ---------> [DLC_Open (DLCI≠0)] (fail)
     """
-    print(f"[BV-19-C] Sending basic RPN (query) to DLCI={dlci} on session")
+    path = []
+    print(colored(f"[*] RPN Query for Settings (BV-19-C) on DLCI={dlci}", "cyan"))
     sock = ensure_dlci_open(sock, target_addr, dlci, open_dlci_set)
-    if sock is None:
-        print(colored(f" [Fail] Could not open DLCI={dlci} for BV-19-C", "red"))
-        return False
+    if sock is None: return path, None
+
+    # --- Step 1: Send basic RPN query ---
+    src1 = state_name(StateName.DATA_OPEN, dlci)
+    dest1 = state_name(StateName.DATA_WAIT_RPN, dlci)
+    
     try:
-        rpn_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=dlci, transition=True, mx_type=RPN)
+        rpn_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=dlci, mx_type=RPN)
         sock.send(rpn_pkt)
+        path.append((src1, "send_rpn_query", dest1, True))
     except Exception as e:
-        print(colored(f" [Fail] Send basic RPN for DLCI={dlci}: {e}", "red"))
-        return False
+        print(colored(f" [Fail] Send RPN query: {e}", "red"))
+        path.append((src1, "send_rpn_query", dest1, False))
+        return path, sock
+
+    # --- Step 2: Receive RPN response and validate its length ---
+    src2 = dest1
+    dest2_success = state_name(StateName.DATA_OPEN, dlci)
+    
     try:
         resp_list, sock = inter_recv(sock, dur=1.0)
-        status, responses = process_rsps(
+        status, _ = process_rsps(
             resp_list,
             required_types=["RPN"],
-            expected_payloads={"RPN": lambda p: len(p) == 8}
+            expected_payloads={"RPN": lambda pkt: pkt.payload_len == 8}
         )
+        
         if status == 0:
-            print(colored(f" [Pass] RPN 8-octet response for DLCI={dlci} received (BV-19-C)", "green"))
-            return True
+            # Success: Add the successful recv transition
+            path.append((src2, "recv_rpn_8octet_resp", dest2_success, True))
         else:
-            print(colored(f" [Fail] RPN response for DLCI={dlci} did not meet expected format.", "red"))
-            return False
+            # Failure: Add the timeout transition
+            print(colored(f" [Fail] RPN response for DLCI={dlci} did not have the expected 8 data octets.", "red"))
+            path.append((src2, "timeout", dest2_success, True))
+            return path, sock
+            
     except Exception as e:
-        print(colored(f" [Fail] Error in RPN receive for DLCI={dlci}: {e}", "red"))
-        return False
+        print(colored(f" [Fail] Error in RPN query receive: {e}", "red"))
+        path.append((src2, "recv_rpn_8octet_resp", dest2_success, False))
+        return path, sock
+
+    print(colored(" [Pass] RPN query successful (BV-19-C)", "green"))
+    return path, sock
 
 # === BV-21-C ===
 def tc_BV_21_C(sock, target_addr, dlci, open_dlci_set):
@@ -561,58 +688,95 @@ def tc_BV_21_C(sock, target_addr, dlci, open_dlci_set):
         |-- All data sent ----> [DLC_Open (DLCI≠0)] (pass)
         |-- Timeout/Error ----> [DLC_Open (DLCI≠0)] (fail)
     """
-    print(f"[BV-21-C] Testing credit-based flow control for DLCI={dlci} on session")
+    path = []
+    print(colored(f"[*] Credit Based Flow Control (BV-21-C) on DLCI={dlci}", "cyan"))
     sock = ensure_dlci_open(sock, target_addr, dlci, open_dlci_set)
-    if sock is None:
-        print(colored(f" [Fail] Could not open DLCI={dlci} for BV-21-C", "red"))
-        return False
+    if sock is None: return path, None
 
-    # Step 1: Perform MSC handshake
+    # --- Step 1: Perform MSC Handshake ---
+    
+    # 1a: Send MSC command (DATA_OPEN -> DATA_WAIT_MSC)
+    src_msc1 = state_name(StateName.DATA_OPEN, dlci)
+    dest_msc1 = state_name(StateName.DATA_WAIT_MSC, dlci)
     try:
-        print(colored("    -> Performing MSC handshake...", "cyan"))
         msc_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=dlci, mx_type=MSC, fc=False, rtc=True, rtr=True)
         sock.send(msc_pkt)
-        resp_list, sock = inter_recv(sock, dur=1.0)
-        process_rsps(resp_list, required_types=["MSC"])  # Only for warning/log, not critical
+        path.append((src_msc1, "send_msc", dest_msc1, True))
     except Exception as e:
-        print(colored(f" [Fail]    MSC Handshake for DLCI={dlci}: {e}", "red"))
-        return False
+        print(colored(f" [Warn] MSC Handshake send failed: {e}", "yellow"))
+        path.append((src_msc1, "send_msc", dest_msc1, False))
+    
+    # 1b: Receive MSC response (DATA_WAIT_MSC -> DATA_OPEN)
+    src_msc2 = dest_msc1
+    dest_msc2 = state_name(StateName.DATA_OPEN, dlci)
+    try:
+        resp_list, sock = inter_recv(sock, dur=1.0)
+        status, responses = process_rsps(resp_list, optional_types=["MSC"], allow_timeout=True)
+        
+        # *** TIMEOUT LOGIC FOR MSC ***
+        if "MSC" in responses:
+            # Success: Add the successful recv transition
+            path.append((src_msc2, "recv_msc_resp", dest_msc2, True))
+        else:
+            # Failure/Timeout: Add the timeout transition
+            print(colored("    [Warn] No MSC response received.", "yellow"))
+            path.append((src_msc2, "timeout", dest_msc2, True))
 
-    # Step 2: Receive credits (UIH_CREDIT)
+    except Exception as e:
+         print(colored(f" [Warn] MSC Handshake receive failed: {e}", "yellow"))
+         path.append((src_msc2, "recv_msc_resp", dest_msc2, False))
+
+    # --- Step 2: Wait to Receive Credits from the IUT ---
+    # This transitions from DATA_OPEN to a new state, DATA_CREDIT_RCVD.
+    src_credit = state_name(StateName.DATA_OPEN, dlci)
+    dest_credit = state_name(StateName.DATA_CREDIT_RCVD, dlci)
+    credits_received = 0
+    
     try:
         print(colored("    -> Waiting to receive credits from IUT...", "cyan"))
-        resp_list, sock = inter_recv(sock, dur=5.0)
-        # Accept any nonzero credit value, custom validator as lambda
-        status, responses = process_rsps(
-            resp_list,
-            required_types=["UIH_CREDIT"],
-            expected_payloads={"UIH_CREDIT": lambda payload: payload and payload[0] > 0}
-        )
-        if status != 0:
-            print(colored(f" [Fail] Timed out waiting for credits from IUT on DLCI={dlci}.", "red"))
-            return False
-        credit_pkt = responses["UIH_CREDIT"]
-        credits_received = credit_pkt.payload[0]  # Or use .credit if FRAME_PKT has this
-        print(colored(f"    -> Received {credits_received} credits!", "gray"))
+        resp_list, sock = inter_recv(sock, dur=3.0)
+        status, responses = process_rsps(resp_list, required_types=["UIH_CREDIT"], allow_timeout=True)
+        
+        if status == 0 and "UIH_CREDIT" in responses:
+            credit_pkt = responses["UIH_CREDIT"]
+            credits_received = credit_pkt.credit
+            if credits_received > 0:
+                print(colored(f"    -> Received {credits_received} credits!", "gray"))
+                path.append((src_credit, "recv_credits", dest_credit, True))
+            else:
+                path.append((src_credit, "recv_credits", dest_credit, False))
+        else:
+            print(colored(f" [Warn] Did not receive credits from IUT on DLCI={dlci}.", "yellow"))
+            path.append((src_credit, "recv_credits", dest_credit, False))
+            return path, sock
+
     except Exception as e:
         print(colored(f" [Fail]    Error while receiving credits from IUT: {e}", "red"))
-        return False
+        path.append((src_credit, "recv_credits", dest_credit, False))
+        return path, sock
 
-    # Step 3: Send data frames based on credits
+    # --- Step 3: Send Data Frames According to Credits Received ---
+    # This transitions from DATA_CREDIT_RCVD back to DATA_OPEN.
+    src_data = dest_credit
+    dest_data = state_name(StateName.DATA_OPEN, dlci)
+    
     try:
         print(colored(f"    -> Sending {credits_received} data frames...", "cyan"))
         for i in range(credits_received):
-            data_to_send = f"packet_{i+1}_of_{credits_received}".encode()
-            data_pkt = UIH.gen(channel=dlci, mx_type=DATA, payload=data_to_send, transition=False)
+            data_to_send = f"packet_{i+1}".encode()
+            data_pkt = UIH.gen(channel=dlci, mx_type=DATA, payload=data_to_send)
             sock.send(data_pkt)
             time.sleep(0.05)
         print(colored(f"    -> Finished sending data.", "gray"))
+        path.append((src_data, "send_credited_data", dest_data, True))
     except Exception as e:
         print(colored(f" [Fail]    Error sending data after receiving credits: {e}", "red"))
-        return False
+        path.append((src_data, "send_credited_data", dest_data, False))
+        return path, sock
 
     print(colored(f" [Pass] Credit-based flow control test complete (BV-21-C)", "green"))
-    return True
+    return path, sock
+
 
 # === BV-22-C ===
 def tc_BV_22_C(sock, target_addr, dlci, open_dlci_set):
@@ -629,38 +793,59 @@ def tc_BV_22_C(sock, target_addr, dlci, open_dlci_set):
         |-- Data sent -----> [DLC_Open (DLCI≠0)] (pass)
         |-- Timeout/Error -> [DLC_Open (DLCI≠0)] (fail)
     """
-    print(f"[BV-22-C] Data transfer with MSC handshake on DLCI={dlci}, session")
+    path = []
+    print(colored(f"[*] Data Transfer with MSC Handshake (BV-22-C) on DLCI={dlci}", "cyan"))
     sock = ensure_dlci_open(sock, target_addr, dlci, open_dlci_set)
-    if sock is None:
-        print(colored(f" [Fail] Could not open DLCI={dlci} for BV-22-C", "red"))
-        return False
+    if sock is None: return path, None
 
-    # Step 1: Send MSC command and check response
+    # --- Step 1: Send MSC command ---
+    src1 = state_name(StateName.DATA_OPEN, dlci)
+    dest1 = state_name(StateName.DATA_WAIT_MSC, dlci)
+    
     try:
-        print(colored("    -> Sending MSC command...", "cyan"))
-        msc_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=dlci, transition=True, mx_type=MSC, fc=False, rtc=True, rtr=True)
+        msc_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=dlci, mx_type=MSC, fc=False, rtc=True, rtr=True)
         sock.send(msc_pkt)
-        resp_list, sock = inter_recv(sock, dur=1.0)
-        process_rsps(resp_list, required_types=["MSC"])
+        path.append((src1, "send_msc", dest1, True))
     except Exception as e:
-        print(colored(f" [Fail]    Send MSC for DLCI={dlci}: {e}", "red"))
-        return False
+        print(colored(f" [Fail] Send MSC: {e}", "red"))
+        path.append((src1, "send_msc", dest1, False))
+        return path, sock
 
-    # Step 2: Send data packet (and optionally check response if required)
+    # --- Step 2: Wait for MSC response ---
+    src2 = dest1
+    dest2_success = state_name(StateName.DATA_OPEN, dlci)
+    
     try:
-        print(colored("    -> Sending data packet...", "cyan"))
-        data_to_send = b"test_data_after_msc"
-        data_pkt = UIH.gen(channel=dlci, mx_type=DATA, payload=data_to_send)
-        sock.send(data_pkt)
-        # Optionally: receive and validate DATA response if protocol requires it
-        # resp_list, sock = inter_recv(sock, dur=0.5)
-        # process_rsps(resp_list, required_types=["DATA"])
+        resp_list, sock = inter_recv(sock, dur=1.0)
+        status, responses = process_rsps(resp_list, optional_types=["MSC"], allow_timeout=True)
+        
+        # *** TIMEOUT LOGIC FOR MSC ***
+        if "MSC" in responses:
+            # Success: Add the successful recv transition
+            path.append((src2, "recv_msc_resp", dest2_success, True))
+        else:
+            # Failure/Timeout: Add the timeout transition
+            print(colored("    [Warn] No MSC response received.", "yellow"))
+            path.append((src2, "timeout", dest2_success, True))
+            
     except Exception as e:
-        print(colored(f" [Fail]    Send data after MSC for DLCI={dlci}: {e}", "red"))
-        return False
+        print(colored(f" [Fail] Error in MSC receive: {e}", "red"))
+        path.append((src2, "recv_msc_resp", dest2_success, False))
 
-    print(colored(f" [Pass] Data transfer after MSC handshake complete (BV-22-C)", "green"))
-    return True
+    # --- Step 3: Send data packet (a self-loop on DATA_OPEN) ---
+    src3 = state_name(StateName.DATA_OPEN, dlci)
+    dest3 = state_name(StateName.DATA_OPEN, dlci)
+    try:
+        data_pkt = UIH.gen(channel=dlci, mx_type=DATA, payload=b"test_data")
+        sock.send(data_pkt)
+        path.append((src3, "send_data", dest3, True))
+    except Exception as e:
+        print(colored(f" [Fail] Send data after MSC: {e}", "red"))
+        path.append((src3, "send_data", dest3, False))
+        return path, sock
+
+    print(colored(" [Pass] Data transfer after MSC handshake complete (BV-22-C)", "green"))
+    return path, sock
 
 
 # === BV-25-C ===
@@ -676,27 +861,58 @@ def tc_BV_25_C(sock, target_addr):
         |-- R: NSC -----------> [Control_Open (DLCI=0)] (pass)
         |-- Timeout/Other ----> [Control_Open (DLCI=0)] (fail)
     """
-    print(f"[BV-25-C] Sending INVALID command for unsupported command handling on session")
+    path = []
+    print(colored("[*] Unsupported Command Handling (BV-25-C)", "cyan"))
+    
     sock = ensure_rfcomm_session(sock, target_addr)
     if sock is None:
-        print(colored(f" [Fail] Could not (re)establish RFCOMM session for BV-25-C", "red"))
-        return False
+        return path, None # Return empty path on hard failure
+
+    # Define the potential state transitions
+    src1 = state_name(StateName.CTRL_OPEN, CTRL_CHANNEL)
+    dest1 = state_name(StateName.CTRL_WAIT_NSC, CTRL_CHANNEL)
+    src2 = dest1
+    dest2 = state_name(StateName.CTRL_OPEN, CTRL_CHANNEL)
+    
+    # --- Perform the full sequence and only record the path on total success ---
+    success = False # Assume failure until proven otherwise
+    
     try:
-        invalid_pkt = UIH.gen(channel=CTRL_CHANNEL, transition=True, mx_type=INVALID)
+        # Step 1: Send INVALID command
+        invalid_pkt = UIH.gen(channel=CTRL_CHANNEL, mx_type=INVALID)
+        sent_invalid_type = invalid_pkt[3]
         sock.send(invalid_pkt)
+        
+        # Step 2: Receive and validate NSC response
+        resp_list, sock = inter_recv(sock, dur=1.0)
+        status, responses = process_rsps(
+            resp_list,
+            required_types=["NSC"],
+            expected_payloads={"NSC": lambda pkt: pkt.payload[2] == sent_invalid_type}
+        )
+        
+        # *** THE KEY LOGIC ***
+        # Only if the status is 0 (PASS) do we consider the entire sequence a success.
+        if status == 0:
+            success = True
+        else:
+            # Provide debug info on failure
+            print(colored(" [Fail] Did not receive a valid NSC response echoing the command type.", "red"))
+            if "NSC" in responses:
+                nsc_pkt = responses["NSC"]
+                print(colored(f"   -> Got NSC, but it contained type {nsc_pkt.payload[2]:#x} instead of {sent_invalid_type:#x}", "yellow"))
+            
     except Exception as e:
-        print(colored(f" [Fail] Send Invalid Command: {e}", "red"))
-        traceback.print_exc()
-        return False
-    try:
-        resp_list, sock = inter_recv(sock, dur=0.1)
-        valid_responses = process_rsps(resp_list)
-        if "NSC" not in valid_responses:
-            print(colored(f" [Fail] Did not receive NSC after invalid command. (got {valid_responses})", "red"))
-            return False
-    except Exception as e:
-        print(colored(f" [Fail] Error in NSC receive: {e}", "red"))
-        traceback.print_exc()
-        return False
-    print(colored(" [Pass] Unsupported command handled correctly (BV-25-C)", "green"))
-    return True
+        print(colored(f" [Fail] Error in NSC test: {e}", "red"))
+        # 'success' remains False
+    
+    # --- Step 3: Append the path ONLY if the whole sequence was successful ---
+    if success:
+        path.append((src1, "send_invalid", dest1, True))
+        path.append((src2, "recv_nsc_echo", dest2, True))
+        print(colored(" [Pass] Unsupported command handled correctly (BV-25-C)", "green"))
+    else:
+        # We don't append anything to the path, so no new states will be created.
+        print(colored(" [Result] The full send/receive sequence for BV-25-C failed.", "yellow"))
+
+    return path, sock

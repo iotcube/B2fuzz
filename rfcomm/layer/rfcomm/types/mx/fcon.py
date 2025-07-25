@@ -1,87 +1,45 @@
-from layer.rfcomm.const import MX_TYPE
+# In layer/rfcomm/types/mx/fcon.py
 
-length = 0
+from layer.rfcomm.const import MX_TYPE
+import random # Kept for consistency, though not used
 
 class FCON:
     """
-    FCON MX command generator class\n
-
-    Parameters
-    ----------
-     -
-    
-    Attributes
-    ----------
-    - self.type: [int] command type field
-
-    Methods
-    ----------
-     - `.__bytes__()`
-     - `.name()`
-     - `.gen()`
+    Dual-purpose FCON MX command generator class.
+    Generates a standard FCON command payload.
     """
-    def __init__(self):
-        self.type: int = MX_TYPE.MX_FCON + (1<<1)
-
-    @property
-    def length(self):
-        return 0
-    
-    def __bytes__(self):
-        """
-        When byte() method is called, this method is runed\n
-
-        Note
-        -----
-        FCON type has no data field so the length field is set to 0x01
-
-        ```
-        length_field value == length*2 + 1
-        ```
-
-
-        Returns
-        --------
-        - [bytes]: FCON type command 
-        """
-        ret = b''
-        ret += bytes([self.type])
-        ret += bytes([1])
-        return ret
-    
     def name():
         """
         Return FCON command name
-
-        
-        Returns
-        --------
-        - [string] FCON frame name
         """
         return 'FCON'
 
     @classmethod
-    def gen(cls, transition=False, fuzz=False, channel=0, dir=0):
+    def gen(cls, is_response=False, fuzz=False, **kwargs):
         """
-            Generate FCON command
+        Generates the inner payload for an FCON multiplexer command.
+        This consists of [type, length].
 
-            Parameters
-            ----------
-            - channel: [int] DLCI to send frame
-            - transition: [bool] transition condition (used state transition)
-            - fuzz: [bool] fuzz condition (used when fuzzing)
-            - dir: [int] direction bit
+        Parameters
+        ----------
+        - is_response: [bool] If True, generates a response (C/R bit = 0).
+        - fuzz: [bool] This flag is present for consistency but doesn't change behavior.
+        - **kwargs: Catches unused arguments like 'channel' and 'transition'.
 
-
-            Returns
-            ----------
-            - [bytes] FCON command
+        Returns
+        ----------
+        - [bytes] The complete FCON command payload for insertion into a UIH frame.
         """
-        # [1] initialize FCON generator class
-        ret = FCON()
+        # The FCON command has no data payload, so its data length is 0.
+        # The length field is always (0 * 2) + 1 = 1.
+        length_field = 1
         
-        # [2] set type bit to FCON
-        ret.type =  MX_TYPE.MX_FCON | (1<<1)
-
-        # [3] return bytes
-        return bytes(ret)
+        # Determine the C/R bit (1 for Command, 0 for Response).
+        cr_bit = 0 if is_response else 1
+        
+        # The MX_FCON constant (0xA3) has the command bit set. We'll ensure it's correct.
+        base_type = MX_TYPE.MX_FCON & 0b11111101  # Mask off original C/R bit
+        type_field = base_type | (cr_bit << 1)
+        
+        # Assemble the final command payload
+        return bytes([type_field, length_field])

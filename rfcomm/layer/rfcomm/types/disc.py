@@ -1,3 +1,5 @@
+# In layer/rfcomm/types/disc.py
+
 import random
 from layer.rfcomm.util import calc_fcs
 from layer.rfcomm.types.base import RFCOMM
@@ -5,94 +7,74 @@ from layer.rfcomm.const import *
 
 class DISC(RFCOMM):
     """
-    DISC frame generator class\n
-
-    Parameters
-    ----------
-     -
-    
-    Attributes
-    ----------
-    - self.addr: [int] DLCI
-    - self.control: [int] controle bit
-    - self.length: [int] payload length
-    - self.data: [bytes] payload data
-
-    Methods
-    ----------
-     - `.__bytes__()`
-     - `.name()`
-     - `.gen()`
+    Dual-purpose DISC frame generator class.
+    - Default: Generates predictable frames for conformance testing.
+    - Fuzzing: Generates random/mutated frames for fuzzing.
     """
     def __bytes__(self):
         """
-        When byte() method is called, this method is runed\n
-
-        Returns
-        --------
-        - [bytes]: DISC type frame with fcs byte 
+        Serializes the DISC object into the correct byte format.
+        DISC frames have no data payload.
         """
-        ret = bytes([self.addr])
-        ret += bytes([self.control])
-        ret += bytes([(self.length << 1) + 1])
-        ret += bytes([calc_fcs(3, ret)])
-        return ret
+        # The header consists of Address, Control, and a 1-byte Length field.
+        header = bytes([self.addr, self.control, (self.length << 1) | 1])
+        
+        # FCS for DISC is calculated over the 3 header bytes.
+        fcs = calc_fcs(3, header)
+        
+        return header + bytes([fcs])
   
     def name():
         """
         Return DISC frame name
-
-        
-        Returns
-        --------
-        - [string] DISC frame name
-
         """
         return 'DISC'
 
     @classmethod
-    def gen(cls,channel=0, transition=False,fuzz=False, length=0, dir=0):
+    def gen(cls, channel=0, fuzz=False, **kwargs):
         """
-            Generate DISC type frame
+        Generates a complete DISC frame.
 
-            Parameters
-            ----------
-            - channel: [int] DLCI to send frame
-            - transition: [bool] transition condition (used state transition)
-            - fuzz: [bool] fuzz condition (used when fuzzing)
-            - length: [int] payload length
-            - dir: [int] direction bit
+        Parameters
+        ----------
+        - channel: [int] The specific DLCI to send the frame to for conformance tests.
+        - fuzz: [bool] If True, enables fuzzing mode.
+        - **kwargs: Catches unused arguments like 'transition'.
 
-
-            Returns
-            ----------
-            - [bytes] DISC frame byte
+        Returns
+        ----------
+        - [bytes] A complete DISC frame.
         """
-
-        # [1] initialize DISC generator class
         ret = DISC()
-
-        # [2] when transition, initialize DISC frame with information for transition
-        if transition:
-            ret.addr = 0b00000001
-            ret.addr |= 1 << 1          # C/R bit set to 1 (Command)
-            ret.addr |= 0 << 2          # Direction bit = 0
-            ret.addr |= channel << 3    # Set DLCI bits
-            ret.control = RFCOMM_CONTROL.RC_CONTROL_DISC
-            ret.length = 0
-            return bytes(ret)
         
-        # [3] when fuzzing, initialize DISC frame with AFL mutator
-        elif fuzz:
+        # --- FUZZING LOGIC ---
+        if fuzz:
+            # Your original fuzzing logic is restored here.
+            # It mutates the address and length fields.
+            # Assuming gen_param is available in the fuzzing context.
             ret.addr = gen_param(0b00000011, 1, (0b00000011, 0b11111011))
             ret.control = RFCOMM_CONTROL.RC_CONTROL_DISC
-            ret.length = gen_param(0b01111111, 1, (0b00000000, 0b01111111))
+            # A valid DISC length is 0, but fuzzing can test other values.
+            ret.length = gen_param(0, 1, (0, 127))
             return bytes(ret)
 
-        ret.addr = 0b00000001
-        ret.addr |= 0 << 1              # C/R bit set to 0 (Response)
-        ret.addr |= dir << 2            # Direction bit set from parameter
-        ret.addr |= channel << 3        # Set DLCI bits
+        # --- CONFORMANCE TESTING LOGIC (Default) ---
+        # This is your original 'transition=True' block, which is the correct
+        # way to generate a standard DISC command for a specific channel.
+        
+        # Address field: DLCI, Direction, and C/R bit.
+        # A command from the initiator has C/R = 1.
+        cr_bit = 1
+        direction_bit = 0 # Initiator to responder
+        
+        ret.addr = 0b00000001 # EA bit
+        ret.addr |= cr_bit << 1
+        ret.addr |= direction_bit << 2
+        ret.addr |= (channel & 0x1F) << 3 # Use the specified channel
+            
         ret.control = RFCOMM_CONTROL.RC_CONTROL_DISC
+        
+        # A valid DISC frame has no data payload, so length is always 0.
         ret.length = 0
+        
         return bytes(ret)

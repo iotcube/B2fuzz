@@ -1,88 +1,45 @@
-from layer.rfcomm.const import MX_TYPE
+# In layer/rfcomm/types/mx/fcoff.py
 
-length = 0
+from layer.rfcomm.const import MX_TYPE
+import random # Kept for consistency, though not used
 
 class FCOFF:
     """
-    FCOFF MX command generator class\n
-
-    Parameters
-    ----------
-     -
-    
-    Attributes
-    ----------
-    - self.type: [int] command type field
-
-    Methods
-    ----------
-     - `.__bytes__()`
-     - `.name()`
-     - `.gen()`
+    Dual-purpose FCOFF MX command generator class.
+    Generates a standard FCOFF command payload.
     """
-    def __init__(self):
-        self.type: int = MX_TYPE.MX_FCOFF + (1<<1)
-
-    @property
-    def length(self):
-        return 0
-    
-    def __bytes__(self):
-        """
-        When byte() method is called, this method is runed\n
-
-        Note
-        -----
-        FCOFF type has no data field so the length field is set to 0x01
-
-        ```
-        length_field value == length*2 + 1
-        ```
-
-
-        Returns
-        --------
-        - [bytes]: FCOFF type command 
-        """
-        ret = b''
-        ret += bytes([self.type])
-        ret += bytes([1])
-        return ret
-    
     def name():
         """
         Return FCOFF command name
-
-        
-        Returns
-        --------
-        - [string] FCOFF frame name
         """
         return 'FCOFF'
 
     @classmethod
-    def gen(cls, transition=False, fuzz=False, channel=0, dir=0):
+    def gen(cls, is_response=False, fuzz=False, **kwargs):
         """
-            Generate FCOFF command
+        Generates the inner payload for an FCOFF multiplexer command.
+        This consists of [type, length].
 
-            Parameters
-            ----------
-            - channel: [int] DLCI to send frame
-            - transition: [bool] transition condition (used state transition)
-            - fuzz: [bool] fuzz condition (used when fuzzing)
-            - dir: [int] direction bit
+        Parameters
+        ----------
+        - is_response: [bool] If True, generates a response (C/R bit = 0).
+        - fuzz: [bool] This flag is present for consistency but doesn't change behavior.
+        - **kwargs: Catches unused arguments like 'channel' and 'transition'.
 
-
-            Returns
-            ----------
-            - [bytes] FCOFF command
+        Returns
+        ----------
+        - [bytes] The complete FCOFF command payload for insertion into a UIH frame.
         """
-
-        # [1] initialize FCOFF generator class
-        ret = FCOFF()
-
-        # [2] set type bit to FCOFF
-        ret.type =  MX_TYPE.MX_FCOFF | (1<<1)
-
-        # [3] return bytes
-        return bytes(ret)
+        # The FCOFF command has no data payload, so its data length is 0.
+        # The length field is always (0 * 2) + 1 = 1.
+        length_field = 1
+        
+        # Determine the C/R bit (1 for Command, 0 for Response).
+        cr_bit = 0 if is_response else 1
+        
+        # The MX_FCOFF constant (0x63) has the command bit set. We'll ensure it's correct.
+        base_type = MX_TYPE.MX_FCOFF & 0b11111101  # Mask off original C/R bit
+        type_field = base_type | (cr_bit << 1)
+        
+        # Assemble the final command payload
+        return bytes([type_field, length_field])

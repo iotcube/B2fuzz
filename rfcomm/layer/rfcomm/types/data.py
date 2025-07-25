@@ -1,23 +1,24 @@
+# In layer/rfcomm/types/data.py
+
 import random
 from layer.rfcomm.types.base import RFCOMM
 from layer.rfcomm.util import calc_fcs
 from layer.rfcomm.const import *
 
-def gen_random_data(len):
-    return b''.join(random.choices([bytes([x]) for x in range(0x00, 0x100)], k=len))
+def gen_random_data(length):
+    return bytes(random.getrandbits(8) for _ in range(length))
 
 class DATA(RFCOMM):
     """
-    DATA frame generator class. Can generate a full frame or just a payload
-    depending on the provided arguments.
+    Dual-purpose DATA payload generator class for UIH frames.
+    - Default: Generates predictable payloads for conformance testing.
+    - Fuzzing: Generates random data payloads for fuzzing.
     """
     def __bytes__(self):
         """
-        When byte() method is called, this method is runed\n
-
-        Returns
-        --------
-        - [bytes]: DATA type frame with fcs byte 
+        This method is kept for backward compatibility in case the DATA class
+        was ever instantiated and serialized directly, but the primary logic
+        is now in the static gen() method.
         """
         ret = bytes([self.addr])
         ret += bytes([self.control])
@@ -29,83 +30,46 @@ class DATA(RFCOMM):
     
     def name():
         """
-        Return DATA frame name
-
-        
-        Returns
-        --------
-        - [string]: DATA frame name 
+        Return DATA type name
         """
         return 'DATA'
 
     @classmethod
-    def gen(cls, channel=0, transition=False, fuzz=False, length=0, dir=0, payload=None, credit=0, **kwargs):
+    def gen(cls, payload=None, credit=0, fuzz=False, **kwargs):
         """
-            Generate a DATA frame or payload.
+        Generates a data payload for use within a UIH frame.
+        This method *only* returns the payload bytes.
 
-            If 'payload' or 'credit' are provided, this method returns *only the payload bytes*
-            for use inside another frame (like UIH).
+        Parameters
+        ----------
+        - payload: [bytes, optional] The specific data to be sent for conformance tests.
+        - credit: [int, optional] The number of credits to prepend for flow control.
+        - fuzz: [bool] If True, enables fuzzing mode.
+        - **kwargs: Catches unused arguments like 'channel', 'transition'.
 
-            Otherwise, it generates a *complete, standalone UIH frame* with random data,
-            maintaining backward compatibility.
-
-            Parameters
-            ----------
-            - channel, transition, fuzz, length, dir: Original arguments for full frame generation.
-            - payload: [bytes] If provided, triggers payload-only generation.
-            - credit: [int] If > 0, triggers payload-only generation and prepends a credit byte.
-            - **kwargs: Catches unused arguments.
-
-            Returns
-            ----------
-            - [bytes] A full RFCOMM frame OR just a data payload.
+        Returns
+        ----------
+        - [bytes] The data payload, possibly prepended with a credit byte.
         """
-        # --- NEW LOGIC: Check for new arguments to decide the behavior ---
-        if payload is not None or credit > 0:
-            # BEHAVIOR 1: Generate payload only (for tc_BV_21_C)
-            data_to_send = payload if payload is not None else b''
-            if credit > 0:
-                return bytes([credit]) + data_to_send
+        # --- FUZZING LOGIC ---
+        if fuzz:
+            # For a fuzzed data payload, we generate random data of a random length.
+            # Credits can also be randomized.
+            fuzzed_data = gen_random_data(random.randint(1, 31))
+            fuzzed_credit = random.randint(0, 15)
+            
+            if fuzzed_credit > 0:
+                return bytes([fuzzed_credit]) + fuzzed_data
             else:
-                return data_to_send
+                return fuzzed_data
 
-        # --- ORIGINAL LOGIC: For full frame generation (backward compatibility) ---
-        # If the new arguments are not present, execute the original code.
+        # --- CONFORMANCE TESTING LOGIC (Default) ---
         
-        # [1] initialize DATA generator class
-        ret = DATA()
-
-        # [2] when transition, initialize DATA frame with information for transition
-        if transition:
-            ret.addr = 0b00000001
-            ret.addr |= 1 << 1 # C/R
-            ret.addr |= dir << 2 # Direction
-            ret.addr |= channel << 3
-            ret.control = RFCOMM_CONTROL.RC_CONTROL_UIH | 0b00010000 # P/F flag
-            ret.data = b"\x21"
-            ret.length = 1 # The length of the data is 1
-            return bytes(ret)
+        # Determine the data payload. If none is provided, use an empty byte string.
+        data_to_send = payload if payload is not None else b''
         
-        # [3] when fuzzing, initialize DATA frame with AFL mutator
-        elif fuzz:
-            ret.addr = 0b00000001
-            ret.addr |= 1 << 1 # C/R
-            ret.addr |= dir << 2 # Direction
-            ret.addr |= channel << 3
-            ret.control = RFCOMM_CONTROL.RC_CONTROL_UIH
-            ret.data = gen_random_data(31)
-            # Assuming gen_param is defined for fuzzing
-            ret.length = gen_param(0b01111111, 1, (0b00000000, 0b01111111))
-            return bytes(ret)
-
-        # [4] Default original behavior
-        ret.addr = 0b00000001
-        ret.addr |= 1 << 1 # C/R
-        ret.addr |= dir << 2 # Direction
-        ret.addr |= channel << 3
-        ret.control = RFCOMM_CONTROL.RC_CONTROL_UIH
-
-        ret.data = gen_random_data(length)
-        ret.length = len(ret.data)
-        
-        return bytes(ret)
+        # Prepend the credit byte if credits are being sent.
+        if credit > 0:
+            return bytes([credit]) + data_to_send
+        else:
+            return data_to_send

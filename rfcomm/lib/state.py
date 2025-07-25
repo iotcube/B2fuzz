@@ -1,3 +1,5 @@
+# lib/state.py
+
 """
 state.py
 
@@ -6,50 +8,86 @@ These values are used across the RFCOMM state machine (see testsuite.py)
 and correspond to the main states and events of RFCOMM as tested in the Bluetooth Test Suite (TS).
 """
 
-# --- State constants for RFCOMM FSM (grouped by phase) ---
+from enum import Enum, auto
 
-# 1. Session Setup phase
-STATE_INITIATED             = 0   # Initial, before SABM(DLCI=0)
-STATE_WAIT_UA_SETUP         = 1   # Waiting for UA after sending SABM(DLCI=0)
+# Define the control channel DLCI
+CTRL_CHANNEL = 0
 
-# 2. Control Management phase
-STATE_ESTABLISHED_CONTROL   = 2   # Control channel established (UA received)
-STATE_WAIT_PN_RESPONSE      = 3   # Waiting for PN response (after sending PN)
-STATE_WAIT_TEST_RESPONSE    = 4   # Waiting for TEST response
-STATE_WAIT_DISC_UA_CTRL     = 5   # Waiting for UA after sending DISC (Control)
-STATE_WAIT_UA_CTRL          = 6   # Waiting for UA after sending SABM (Control phase, DLCI≠0)
+class StateName(Enum):
+    # Session-level states
+    SESS_OPEN = "SESS_OPEN"
+    SESS_WAIT_UA = "SESS_WAIT_UA"
 
-# 3. Multiplexed DLC phase
-STATE_DLC_OPEN              = 7   # DLCI≠0 opened (data link established)
-STATE_WAIT_RPN_RESPONSE     = 8   # Waiting for RPN response
-STATE_WAIT_DISC_UA_DLC      = 9   # Waiting for UA after sending DISC (DLC)
+    # Control channel states (DLCI=0)
+    CTRL_OPEN = "CTRL_OPEN"
+    CTRL_WAIT_PN = "CTRL_WAIT_PN"
+    CTRL_WAIT_TEST = "CTRL_WAIT_TEST"
+    CTRL_WAIT_NSC = "CTRL_WAIT_NSC"
+    CTRL_WAIT_UA = "CTRL_WAIT_UA"
+    CTRL_WAIT_DISC_UA = "CTRL_WAIT_DISC_UA"
 
-# --- Channel/role constant ---
-CTRL_CHANNEL = 0  # DLCI=0 for control channel
+    # Data channel states (DLCI > 0)
+    DATA_OPEN = "DATA_OPEN"
+    DATA_WAIT_MSC = "DATA_WAIT_MSC"
+    DATA_WAIT_RPN = "DATA_WAIT_RPN"
+    DATA_WAIT_RLS = "DATA_WAIT_RLS"
+    DATA_WAIT_UA = "DATA_WAIT_UA"
+    DATA_WAIT_DISC_UA = "DATA_WAIT_DISC_UA"
+    DATA_CREDIT_RCVD = "DATA_CREDIT_RCVD" 
 
-def state2str(state):
-    mapping = {
-        # Session Setup phase
-        STATE_INITIATED:            "Initiated",
-        STATE_WAIT_UA_SETUP:        "Wait_UA (Setup)",
-        # Control Management phase
-        STATE_ESTABLISHED_CONTROL:  "Established_Control",
-        STATE_WAIT_PN_RESPONSE:     "Wait_PN_Response",
-        STATE_WAIT_TEST_RESPONSE:   "Wait_Test_Response",
-        STATE_WAIT_DISC_UA_CTRL:    "Wait_DISC_UA (Ctrl)",
-        STATE_WAIT_UA_CTRL:         "Wait_UA (Ctrl)",
-        # Multiplexed DLC phase
-        STATE_DLC_OPEN:             "DLC Open (DLCI≠0)",
-        STATE_WAIT_RPN_RESPONSE:    "Wait_RPN_Response",
-        STATE_WAIT_DISC_UA_DLC:     "Wait_DISC_UA (DLC)",
-    }
-    return mapping.get(state, f"unknown_state_{state}")
+class Direction(Enum):
+    SEND = auto()
+    RECV = auto()
+    OTHER = auto() # For events like timeouts
 
-def frame2str(frame):
+class EventType(Enum):
+    SABM = auto()
+    UA = auto()
+    DM = auto()
+    PN = auto()
+    TEST = auto()
+    DISC = auto()
+    NSC = auto()
+    MSC = auto()
+    RLS = auto()
+    RPN = auto()
+    UIH = auto()
+    TIMEOUT = auto()
+
+class Event:
     """
-    Return the string name for a given RFCOMM frame/command instance.
+    Represents a state machine transition event.
     """
-    return frame.name()
+    def __init__(self, direction, event_type, detail=None):
+        self.direction = direction      # SEND, RECV, OTHER
+        self.event_type = event_type    # SABM, UA, etc.
+        self.detail = detail            # Optional (e.g., DLCI number)
+
+    def __repr__(self):
+        return f"{self.direction.name}:{self.event_type.name}" + (f" ({self.detail})" if self.detail is not None else "")
+
+def state_name(enum, dlci=None):
+    """
+    Returns unique state name for GraphMachine.
+    - enum: StateName Enum member.
+    - dlci: integer or None.
+    """
+    # Use the enum's *value* (the string) which is now unique, not its .name
+    base_name = enum.value
+    if dlci is None:
+        # Session-level states often don't have a DLCI.
+        return base_name
+    return f"{base_name}_{dlci}"
+
+
+
+def state_label(enum, dlci=None):
+    """
+    Returns pretty label for visualization.
+    """
+    if dlci is None:
+        return f"{enum.value}"
+    return f"{enum.value} (DLCI {dlci})"
 
 # --- Import RFCOMM frame and command classes ---
 # Core frame types
