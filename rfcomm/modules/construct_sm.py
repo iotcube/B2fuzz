@@ -96,7 +96,7 @@ def construct_sm(target_addr, target_channels=None, VISUALIZE=True, vis_path="rf
         add_transitions_from_path(path)
         if not sock:
             print(colored("[!] Session initialization failed. Aborting.", "red"))
-            return machine # Return the machine in its current state
+            return None
 
         # 2. Session-level tests
         path, sock = tc_BV_11_C(sock, target_addr)

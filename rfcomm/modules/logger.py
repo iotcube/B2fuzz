@@ -14,8 +14,9 @@ class Logger:
 		self.logger.setLevel(logging.DEBUG)
 		self.formatter = logging.Formatter(u"[%(levelname)8s] %(message)s")
 
-		# Save splitted log file
-		os.makedirs("./log/{}".format(self.time))
+		# Save splitted log file (✅ allow reruns)
+		os.makedirs("./log/{}".format(self.time), exist_ok=True)
+
 		self.tmp_pkt_cnt = 0
 		self.savefile_version = 1
 		self.current_savefile_path = "./log/{}/{}_v{}.log".format(self.time, self.time, self.savefile_version)

@@ -71,7 +71,7 @@ class RPN:
         # Check if specific port values were provided for the test case
         if port_values is not None:
             # Generate RPN with the specific 8-byte port settings.
-            length_field = 19 # Data length is 1 (DLCI) + 8 (port values) = 9
+            length_field = 17 # Data length is 1 (DLCI) + 7 (port values) = 8
             payload_data = bytes([dlci_field]) + port_values
         else:
             # Generate basic 1-octet RPN (for querying settings).

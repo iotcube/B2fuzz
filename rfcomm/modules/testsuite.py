@@ -8,7 +8,18 @@ from lib.state import StateName, state_name, CTRL_CHANNEL
 from lib.state import SABM, UA, DISC, UIH
 from lib.state import PN, RLS, RPN, FCON, DATA, INVALID, NSC, TEST, MSC
 
+# -----------------------------------------------------------------------------
+# Debug gating
+# -----------------------------------------------------------------------------
+DEBUG_PRINTS = False  # Set True during SM build, False during fuzzing
+
+def _dbg(msg: str):
+    if DEBUG_PRINTS:
+        print(msg)
+
+# -----------------------------------------------------------------------------
 # Utility Functions
+# -----------------------------------------------------------------------------
 
 def is_sock_valid(sock):
     """
@@ -33,22 +44,22 @@ def ensure_rfcomm_session(sock, target_addr):
     Ensure an active RFCOMM session exists.
     If the provided socket is invalid or None, establish a new RFCOMM session.
     """
-    print(f"[Debug] ensure_rfcomm_session: Checking existing socket for target_addr={target_addr}")
+    _dbg(f"[Debug] ensure_rfcomm_session: Checking existing socket for target_addr={target_addr}")
     if is_sock_valid(sock):
-        print("[Debug] ensure_rfcomm_session: Socket is valid.")
+        _dbg("[Debug] ensure_rfcomm_session: Socket is valid.")
         return sock
     if sock is not None:
-        print("[Debug] ensure_rfcomm_session: Socket is invalid, closing.")
+        _dbg("[Debug] ensure_rfcomm_session: Socket is invalid, closing.")
         try:
             sock.close()
         except Exception:
             pass
-    print("[Debug] ensure_rfcomm_session: Creating new RFCOMM session.")
+    _dbg("[Debug] ensure_rfcomm_session: Creating new RFCOMM session.")
     _, sock_new = tc_BV_01_C(target_addr)
     if sock_new is None:
         print(colored(f" [Fail] Unable to establish RFCOMM session to {target_addr}", "red"))
         return None
-    print("[Debug] ensure_rfcomm_session: New RFCOMM session established.")
+    _dbg("[Debug] ensure_rfcomm_session: New RFCOMM session established.")
     return sock_new
 
 def ensure_dlci_open(sock, target_addr, dlci, open_dlci_set):
@@ -56,18 +67,18 @@ def ensure_dlci_open(sock, target_addr, dlci, open_dlci_set):
     Only open DLCI if not already open.
     """
     if dlci in open_dlci_set:
-        print(f"[Debug] ensure_dlci_open: DLCI {dlci} is already open.")
+        _dbg(f"[Debug] ensure_dlci_open: DLCI {dlci} is already open.")
         return sock
     sock = ensure_rfcomm_session(sock, target_addr)
     if sock is None:
-        print("[Debug] ensure_dlci_open: No valid socket, cannot open DLCI.")
+        _dbg("[Debug] ensure_dlci_open: No valid socket, cannot open DLCI.")
         return None
     _, sock_new = tc_BV_05_C(sock, target_addr, dlci)
     if sock_new is None:
         print(colored(f" [Fail] Unable to open DLCI={dlci} on session {sock}", "red"))
         return None
     open_dlci_set.add(dlci)
-    print(f"[Debug] ensure_dlci_open: DLCI {dlci} is open.")
+    _dbg(f"[Debug] ensure_dlci_open: DLCI {dlci} is open.")
     return sock_new
 
 def ensure_dlci_closed(sock, target_addr, dlci, open_dlci_set):
@@ -81,12 +92,14 @@ def ensure_dlci_closed(sock, target_addr, dlci, open_dlci_set):
     if sock is None:
         print("[Debug] ensure_dlci_closed: No valid socket, cannot close DLCI.")
         return None
-    status = tc_BV_07_C(sock, target_addr, dlci, target_addr)
-    if status:
-        open_dlci_set.discard(dlci)
+    # tc_BV_07_C returns (path, sock) and will discard the dlci from the set itself
+    path, sock = tc_BV_07_C(sock, target_addr, dlci, open_dlci_set, is_sub_call=True)
     return sock
 
+
+# -----------------------------------------------------------------------------
 # Test Case Functions
+# -----------------------------------------------------------------------------
 
 def tc_BV_01_C(target_addr):
     """
@@ -574,7 +587,13 @@ def tc_BV_17_C(sock, target_addr, dlci, open_dlci_set):
     dest1 = state_name(StateName.DATA_WAIT_RPN, dlci)
     
     try:
-        port_settings = bytes([0x07, 0x03, 0x00, 0x11, 0x13, 0xFF, 0xFF, 0xFF])
+        port_settings = bytes([0x00, 0x03, 0x00, 0x11, 0x13, 0xFF, 0xFF])
+        """
+        See ETSI p.32 Table 11: Port Value Octets
+        Value Octet VO1 VO2 VO3 VO4 VO5 VO6 VO7 VO8
+        Sent        0B  07  03  00  11  13  FF  FF 
+        Rcvd        0B  07  03  00  11  13  7F
+        """
         rpn_pkt = UIH.gen(channel=CTRL_CHANNEL, channel_to_ctrl=dlci, mx_type=RPN, port_values=port_settings)
         sock.send(rpn_pkt)
         path.append((src1, "send_rpn_settings", dest1, True))
