@@ -3,6 +3,7 @@ from pprint import pprint
 from modules import *
 from lib import *
 from time import sleep
+import random
 from layer.rfcomm.const import RFCOMM_PSM
 from layer.rfcomm.types.dm import DM
 from layer.rfcomm.types.disc import DISC

@@ -279,6 +279,8 @@ def main(argv=None):
         if not dlcis_to_fuzz:
             print("[!] No RFCOMM DLCIs to fuzz.")
             return
+        
+        # service exerciser is for slower packets to not trigger DOS
         """
         # Run service exerciser pre-phase
         service_exerciser(

@@ -40,10 +40,12 @@ now = datetime.now()
 t = str(now)[11:19].replace(":", "", 2)
 today = date.today().isoformat()
 d = today[2:4] + today[5:7] + today[8:10]
+
 def get_logtime():
+    # Generate timestamp string (YYMMDDHHMMSS) for log folder
     return d + t
 
-logger = Logger(get_logtime())
+logger = Logger(get_logtime()) # create a logger instance for this fuzzing run
 
 # -----------------
 # Globals / knobs
@@ -51,7 +53,7 @@ logger = Logger(get_logtime())
 pkt_cnt = 0
 MUTATION_CNT = 200          # only used in count-mode
 CHECK_BATCH = 25            # send this many packets per inner loop before checking/printing
-SPAM_SLEEP = 0.001            # small sleep between sends if you want to throttle
+SPAM_SLEEP = 0.001          # small sleep between sends if you want to throttle
 
 # ---------------
 # Helpers
@@ -82,7 +84,7 @@ def _log_send(state_label: str, payload: bytes):
     })
 
 def _rand_frame():
-    # 50/50 frame vs MX command
+    """Pick a random RFCOMM primitive to fuzz with (frame vs MX command)."""
     if random.random() < 0.5:
         return random.choice(RFCOMM_FRAMES)
     return random.choice(RFCOMM_COMMANDS)
@@ -100,8 +102,10 @@ def _build_random_pkt_for_dlci(dlci: int) -> bytes:
 
 def _spam_random_packets(sock, label: str, dlci: int, until_ts: float, start_t: float, sent_total: int):
     """
-    Send up to CHECK_BATCH packets on an already-open socket.
-    Returns (sent_in_batch, new_sent_total). If a bluetooth error occurs, returns (0, sent_total).
+    Core inner loop: build and send up to CHECK_BATCH random packets on a given DLCI.
+    - Stops if we hit end of time slice or socket errors.
+    - Updates log and progress display.
+    Returns: (packets_sent_this_batch, new_sent_total).
     """
     sent_in_batch = 0
     for _ in range(CHECK_BATCH):
@@ -139,8 +143,10 @@ def _gen_test_pkt_via_stack() -> bytes:
 
 def fuzz_ctrl_open(target_addr, dlci_choices, duration_seconds=None, time_retry=False):
     """
-    Time-mode for CTRL (dlci0): spam random UIH/MX frames targeting DLCIs round-robin.
-    If time_retry is True, will keep trying to re-open the session until the slice ends.
+    Time-based fuzzer for the control channel (DLCI=0).
+    - First half of slice: exercise TEST frames (legit UIH(TEST)) repeatedly.
+    - Second half: random UIH/MX frames targeted at each DLCI in round-robin.
+    - If time_retry=True: will re-open session on errors until slice ends.
     """
     print(colored("[-] current state: CTRL_OPEN (DLCI=0)", "blue"))
     if duration_seconds is None or duration_seconds <= 0:
@@ -213,8 +219,10 @@ def fuzz_ctrl_open(target_addr, dlci_choices, duration_seconds=None, time_retry=
 
 def fuzz_data_open(target_addr, dlci: int, duration_seconds=None, time_retry=False):
     """
-    Time-mode for a specific DATA DLCI: spam random frames for the slice.
-    If time_retry is True, will keep trying to re-open DLCI until the slice ends.
+    Time-based fuzzer for a single DATA DLCI.
+    - Opens the DLCI once.
+    - Sends random frames until slice ends.
+    - Optionally retries if disconnect happens.
     """
     print(colored(f"[-] current state: DATA_OPEN (DLCI={dlci})", "blue"))
     if duration_seconds is None or duration_seconds <= 0:
@@ -310,9 +318,11 @@ def fuzzing(target_addr, profile_name=None, port=None, sm_like=None, test_info=N
 def fuzz_rfcomm(target_addr, dlcis, per_dlci_mutations=400, quiet=True, jitter_range=(0.0, 0.05),
                 progress_every=25, seed=None, time_limit_seconds=None, time_retry=False):
     """
-    Main entry called by rfcomm/main.py.
-    - If time_limit_seconds is set: equal split across CTRL + provided DLCIs.
-    - If not: simple count-mode fallback per DLCI (random packets).
+    Main entrypoint used by rfcomm/main.py
+    Modes:
+    - Time-based (if --time is set): split total_time across CTRL + each DLCI.
+    - Count-based (default): send per_dlci_mutations random packets per DLCI.
+    Handles seeding, logging, progress display.
     """
     if seed is not None:
         random.seed(seed)
